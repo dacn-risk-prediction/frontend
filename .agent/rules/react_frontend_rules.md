@@ -21,6 +21,11 @@ You are a Staff Frontend Engineer specializing in React, TypeScript, Vite, and s
 | Tables & Data Grids | `@tanstack/react-table` |
 | Charts & XAI Visualization | `recharts` (or `plotly.js` for complex SHAP/waterfall charts) |
 
+### Package Manager
+- **Always use `pnpm`:** The project uses `pnpm` as the exclusive package manager. Never generate commands using `npm` or `yarn`.
+- **Install commands:** Use `pnpm add <package>` (not `pnpm install <package>`). For dev dependencies, use `pnpm add -D <package>`.
+- **Execution commands:** Use `pnpm dlx` for executing one-off binaries (e.g., `pnpm dlx shadcn@latest add card`).
+
 ## Directory Structure (`bulletproof-react` pattern)
 
 All application code lives in `src/`:
@@ -96,6 +101,11 @@ src/
 
 - Use server-side pagination, sorting, and filtering for large datasets (courses, enrollments, student rosters) matching FastAPI query parameters (`skip`, `limit`, `search`).
 - Keep URL search params (`?page=1&search=CS101`) synced with table state so views are shareable and bookmarkable.
+
+### 8.Tailwind CSS Strict Standards
+- **Theme & Brand Colors:** Strictly use configured theme colors and mapped CSS variables (e.g., `bg-brand-blue`, `text-primary`) instead of arbitrary hex codes (e.g., `bg-[#1488DB]`). Never use bracket notation `[#...]` for any color that is already defined in `tailwind.config` or `index.css`.
+- **No Arbitrary Values for Standard Spacing:** Never use arbitrary bracket notation (e.g., `h-[600px]`, `p-[16px]`, `mt-[24px]`) if the pixel value is a multiple of 4. Always divide by 4 to use the exact scale token (e.g., `600px` -> `h-150`).
+- **Arbitrary Values as Fallback:** Only use bracket notation `-[...]` for strictly irregular fractional values that do not exist in the default Tailwind theme.
 
 ## Conventions
 

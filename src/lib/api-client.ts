@@ -54,13 +54,18 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config as CustomAxiosRequestConfig | undefined
 
     if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
-      if (
-        originalRequest.url?.includes("/auth/refresh") ||
-        originalRequest.url?.includes("/auth/login")
-      ) {
+      // Never attempt refresh or page reload if login itself returned 401
+      if (originalRequest.url?.includes("/auth/login")) {
+        return Promise.reject(error)
+      }
+
+      // If refresh token request itself fails with 401, clear credentials & redirect
+      if (originalRequest.url?.includes("/auth/refresh")) {
         localStorage.removeItem("access_token")
         localStorage.removeItem("refresh_token")
-        window.location.href = "/login"
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login"
+        }
         return Promise.reject(error)
       }
 
@@ -84,7 +89,9 @@ apiClient.interceptors.response.use(
 
       if (!refreshToken) {
         isRefreshing = false
-        window.location.href = "/login"
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login"
+        }
         return Promise.reject(error)
       }
 
@@ -120,7 +127,9 @@ apiClient.interceptors.response.use(
 
         localStorage.removeItem("access_token")
         localStorage.removeItem("refresh_token")
-        window.location.href = "/login"
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login"
+        }
 
         return Promise.reject(refreshError)
       }
@@ -129,4 +138,3 @@ apiClient.interceptors.response.use(
     return Promise.reject(error)
   }
 )
-

@@ -1,17 +1,16 @@
-export type UserRole = 'lecturer' | 'student';
+export * from "./api"
 
 export interface PaginationParams {
-  skip?: number;
-  limit?: number;
-  search?: string;
+  skip?: number
+  limit?: number
+  search?: string
 }
 
 export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
+  items: T[]
+  total: number
 }
 
 export interface ApiError {
-  detail: string | { loc: (string | number)[]; msg: string; type: string }[];
+  detail: string | { loc: (string | number)[]; msg: string; type: string }[]
 }
-
