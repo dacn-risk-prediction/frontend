@@ -107,6 +107,10 @@ src/
 - **No Arbitrary Values for Standard Spacing:** Never use arbitrary bracket notation (e.g., `h-[600px]`, `p-[16px]`, `mt-[24px]`) if the pixel value is a multiple of 4. Always divide by 4 to use the exact scale token (e.g., `600px` -> `h-150`).
 - **Arbitrary Values as Fallback:** Only use bracket notation `-[...]` for strictly irregular fractional values that do not exist in the default Tailwind theme.
 
+### 9. Conditional Classes & Class Merging:
+- Use `cn()` (`clsx` + `tailwind-merge`) for conditional Tailwind classes.
+- Always merge classes in a predictable way to avoid conflicts and ensure the correct styles are applied.
+
 ## Conventions
 
 - Use functional components with explicit TypeScript props interfaces.

@@ -313,6 +313,7 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
     "total_attempted_credits": 127,
     "passed_courses_count": 44,
     "failed_courses_count": 0,
+    "is_graduated": true,
     "semester_gpas": [
       {
         "semester_code": "HK131",
@@ -337,14 +338,54 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
 
 ---
 
-#### 5. Update Student Record
+#### 5. Get Enrolled Courses in Current Active Semester
+- **Endpoint**: `GET /api/v1/students/{student_id}/current`
+- **Auth Required**: No
+- **Path Parameters**: `student_id` (*string*)
+- **Description**: Returns all courses registered by the student in the current active academic term (dynamically resolved from active semester, currently `HK261`), including class code, section group, credit weight, and lecturer details.
+- **Response (`200 OK`)**:
+  ```json
+  [
+    {
+      "course_code": "CO4029",
+      "course_name": "Đồ án Chuyên ngành",
+      "credits": 2,
+      "class_id": "HK261_CO4029_L01",
+      "class_group": "L01",
+      "lecturer_id": "1300746",
+      "lecturer_name": "Ngô Quốc An",
+      "retaken": false,
+      "status": null
+    },
+    {
+      "course_code": "SP1037",
+      "course_name": "Tư tưởng Hồ Chí Minh",
+      "credits": 2,
+      "class_id": "HK261_SP1037_L03",
+      "class_group": "L03",
+      "lecturer_id": "1387855",
+      "lecturer_name": "Huỳnh Ngọc Khôi",
+      "retaken": false,
+      "status": null
+    }
+  ]
+  ```
+- **Error Codes**:
+  - `404 Not Found`:
+    - Student does not exist: `{"detail": "Student '2617037' not found"}`
+    - Student already graduated: `{"detail": "Student '1316593' has already graduated and has no registered classes in semester HK261"}`
+    - Student not registered in current semester: `{"detail": "Student '1664698' has not registered for any classes in semester HK261"}`
+
+---
+
+#### 6. Update Student Record
 - **Endpoint**: `PUT /api/v1/students/{student_id}`
 - **Request Body** (optional fields): `cohort`, `major`, `user_id`
 - **Response (`200 OK`)**: `StudentResponse`
 
 ---
 
-#### 6. Delete Student Record
+#### 7. Delete Student Record
 - **Endpoint**: `DELETE /api/v1/students/{student_id}`
 - **Response (`204 No Content`)**
 
@@ -486,21 +527,47 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
 
 #### 1. List Semesters
 - **Endpoint**: `GET /api/v1/semesters/`
-- **Query Parameters**: `skip`, `limit`, `academic_year` (e.g. `2023-2024`)
+- **Query Parameters**:
+  - `skip`, `limit`
+  - `academic_year` (*string*, optional): e.g. `2023-2024`
+  - `is_active` (*boolean*, optional): Filter by active status (`true` / `false`)
 - **Response (`200 OK`)**:
   ```json
   [
     {
-      "semester_code": "HK231",
-      "academic_year": "2023-2024",
-      "term": 1
+      "semester_code": "HK261",
+      "academic_year": "2026-2027",
+      "term": 1,
+      "is_active": true
+    },
+    {
+      "semester_code": "HK253",
+      "academic_year": "2025-2026",
+      "term": 3,
+      "is_active": false
     }
   ]
   ```
 
 ---
 
-#### 2. Create Semester
+#### 2. Get Current Active Semester
+- **Endpoint**: `GET /api/v1/semesters/active`
+- **Auth Required**: No
+- **Response (`200 OK`)**:
+  ```json
+  {
+    "semester_code": "HK261",
+    "academic_year": "2026-2027",
+    "term": 1,
+    "is_active": true
+  }
+  ```
+- **Error Codes**: `404 Not Found` (when no active semester is configured).
+
+---
+
+#### 3. Create Semester
 - **Endpoint**: `POST /api/v1/semesters/`
 - **Request Body**:
   ```json
@@ -514,20 +581,20 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
 
 ---
 
-#### 3. Get Semester by Code
+#### 4. Get Semester by Code
 - **Endpoint**: `GET /api/v1/semesters/{semester_code}`
 - **Response (`200 OK`)**: `SemesterResponse`
 
 ---
 
-#### 4. Update Semester
+#### 5. Update Semester
 - **Endpoint**: `PUT /api/v1/semesters/{semester_code}`
-- **Request Body**: `academic_year`, `term`
+- **Request Body** (optional fields): `academic_year`, `term`, `is_active`
 - **Response (`200 OK`)**: `SemesterResponse`
 
 ---
 
-#### 5. Delete Semester
+#### 6. Delete Semester
 - **Endpoint**: `DELETE /api/v1/semesters/{semester_code}`
 - **Response (`204 No Content`)**
 
@@ -787,7 +854,20 @@ export interface StudentAcademicSummary {
   total_attempted_credits: number;
   passed_courses_count: number;
   failed_courses_count: number;
+  is_graduated: boolean;
   semester_gpas: SemesterGpaItem[];
+}
+
+export interface StudentCurrentCourseItem {
+  course_code: string;
+  course_name: string;
+  credits: number;
+  class_id: string | null;
+  class_group: string | null;
+  lecturer_id: string | null;
+  lecturer_name: string | null;
+  retaken: boolean;
+  status: string | null;
 }
 
 // ==========================================
@@ -848,12 +928,20 @@ export interface Semester {
   semester_code: string;
   academic_year: string;
   term: number;
+  is_active: boolean;
 }
 
 export interface SemesterCreatePayload {
   semester_code: string;
   academic_year: string;
   term: number;
+  is_active?: boolean;
+}
+
+export interface SemesterUpdatePayload {
+  academic_year?: string;
+  term?: number;
+  is_active?: boolean;
 }
 
 // ==========================================

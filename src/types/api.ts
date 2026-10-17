@@ -90,8 +90,24 @@ export interface StudentAcademicSummary {
   total_attempted_credits: number
   passed_courses_count: number
   failed_courses_count: number
+  is_graduated?: boolean
   semester_gpas: SemesterGPA[]
 }
+
+export interface StudentCurrentCourseItem {
+  course_code: string
+  course_name: string
+  credits: number
+  class_id: string | null
+  class_group: string | null
+  lecturer_id: string | null
+  lecturer_name: string | null
+  retaken: boolean
+  status: string | null
+}
+
+export type StudentHK261CourseItem = StudentCurrentCourseItem
+
 
 // ==========================================
 // Lecturer Types
