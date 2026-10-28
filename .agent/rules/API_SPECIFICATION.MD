@@ -18,6 +18,7 @@
    - [Students](#students)
    - [Lecturers](#lecturers)
    - [Courses & Prerequisites](#courses--prerequisites)
+   - [Curriculums & Program Structures](#curriculums--program-structures)
    - [Semesters](#semesters)
    - [Academic Classes](#academic-classes)
    - [Enrollments & Grades](#enrollments--grades)
@@ -245,7 +246,7 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
 - **Query Parameters**:
   - `skip`, `limit`
   - `cohort` (*string*, optional): e.g. `K26`, `2022`
-  - `major` (*string*, optional): e.g. `computer science`
+  - `major` (*string*, optional): e.g. `Khoa hoc May tinh`
   - `search` (*string*, optional): Search keyword
 - **Response (`200 OK`)**: Array of `StudentResponse`:
   ```json
@@ -253,7 +254,15 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
     {
       "student_id": "2617037",
       "cohort": "K26",
-      "major": "computer science",
+      "major": "Khoa hoc May tinh",
+      "program": "Dai tra",
+      "specialization": "Cong nghe phan mem",
+      "family_income": "Trung binh",
+      "financial_pressure": "Thap",
+      "living_condition": "Ky tuc xa",
+      "english_pass": true,
+      "english_eligibility_by_semester": "HK261:DAT",
+      "ctxh_days_by_semester": "HK261:15",
       "user_id": "123e4567-e89b-12d3-a456-426614174000"
     }
   ]
@@ -268,7 +277,15 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
   {
     "student_id": "2617037",
     "cohort": "K26",
-    "major": "computer science",
+    "major": "Khoa hoc May tinh",
+    "program": "Dai tra",
+    "specialization": "Cong nghe phan mem",
+    "family_income": "Trung binh",
+    "financial_pressure": "Thap",
+    "living_condition": "Ky tuc xa",
+    "english_pass": true,
+    "english_eligibility_by_semester": "HK261:DAT",
+    "ctxh_days_by_semester": "HK261:15",
     "user_id": "123e4567-e89b-12d3-a456-426614174000"
   }
   ```
@@ -284,7 +301,15 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
   {
     "student_id": "2617037",
     "cohort": "K26",
-    "major": "computer science",
+    "major": "Khoa hoc May tinh",
+    "program": "Dai tra",
+    "specialization": "Cong nghe phan mem",
+    "family_income": "Trung binh",
+    "financial_pressure": "Thap",
+    "living_condition": "Ky tuc xa",
+    "english_pass": true,
+    "english_eligibility_by_semester": "HK261:DAT",
+    "ctxh_days_by_semester": "HK261:15",
     "user_id": "123e4567-e89b-12d3-a456-426614174000",
     "user": {
       "id": "123e4567-e89b-12d3-a456-426614174000",
@@ -303,7 +328,9 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
 - **Endpoint**: `GET /api/v1/students/{student_id}/summary`
 - **Auth Required**: No
 - **Path Parameters**: `student_id` (*string*)
-- **Description**: Returns the student's overall Cumulative GPA (weighted average of passed courses), total degree credits accumulated, total attempted credits, and chronological term GPA breakdown for each semester studied.
+- **Description**: Returns the student's overall Cumulative GPA (weighted average of passed courses with numeric grades), total degree credits accumulated (including exempted courses such as `LA1003`..`LA1009` with `final_score = 12.0`), total attempted credits, and chronological term GPA breakdown for each semester studied.
+> [!NOTE]
+> **Exempted Courses (`final_score = 12.0`)**: In university business rules, English exemption courses grant full academic credits towards graduation (`total_passed_credits`), but are excluded from the denominator in GPA weighted calculations to preserve numeric scale integrity.
 - **Response (`200 OK`)**:
   ```json
   {
@@ -380,7 +407,22 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
 
 #### 6. Update Student Record
 - **Endpoint**: `PUT /api/v1/students/{student_id}`
-- **Request Body** (optional fields): `cohort`, `major`, `user_id`
+- **Request Body** (all fields optional):
+  ```json
+  {
+    "cohort": "K26",
+    "major": "Khoa hoc May tinh",
+    "program": "Dai tra",
+    "specialization": "He thong thong tin",
+    "family_income": "Kha",
+    "financial_pressure": "Thap",
+    "living_condition": "Nha rieng",
+    "english_pass": true,
+    "english_eligibility_by_semester": "HK261:DAT",
+    "ctxh_days_by_semester": "HK261:18",
+    "user_id": "123e4567-e89b-12d3-a456-426614174000"
+  }
+  ```
 - **Response (`200 OK`)**: `StudentResponse`
 
 ---
@@ -423,14 +465,51 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
 
 ---
 
-#### 4. Update Lecturer
+#### 4. Get Classes Taught by Lecturer in Current Active Semester
+- **Endpoint**: `GET /api/v1/lecturers/{lecturer_id}/current` (Alias: `GET /api/v1/lecturers/{lecturer_id}/classes/current`)
+- **Auth Required**: No
+- **Path Parameters**: `lecturer_id` (*string*)
+- **Description**: Returns all academic classes assigned to this lecturer for the currently active semester (dynamically resolved from `semesters.is_active = true`, e.g. `HK261`), including course details and enrolled student count.
+- **Response (`200 OK`)**:
+  ```json
+  [
+    {
+      "class_id": "HK261_CO1005_L01",
+      "class_group": "L01",
+      "course_code": "CO1005",
+      "course_name": "Nhập môn Điện toán",
+      "credits": 3,
+      "semester_code": "HK261",
+      "academic_year": "2026-2027",
+      "term": 1,
+      "total_students": 116
+    },
+    {
+      "class_id": "HK261_CO3139_L01",
+      "class_group": "L01",
+      "course_code": "CO3139",
+      "course_name": "Chuyển đổi số",
+      "credits": 3,
+      "semester_code": "HK261",
+      "academic_year": "2026-2027",
+      "term": 1,
+      "total_students": 70
+    }
+  ]
+  ```
+- **Error Codes**:
+  - `404 Not Found`: Lecturer with ID does not exist (`{"detail": "Lecturer 'GV9999' not found"}`).
+
+---
+
+#### 5. Update Lecturer
 - **Endpoint**: `PUT /api/v1/lecturers/{lecturer_id}`
 - **Request Body**: `departments`, `user_id`
 - **Response (`200 OK`)**: `LecturerResponse`
 
 ---
 
-#### 5. Delete Lecturer
+#### 6. Delete Lecturer
 - **Endpoint**: `DELETE /api/v1/lecturers/{lecturer_id}`
 - **Response (`204 No Content`)**
 
@@ -468,22 +547,31 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
 
 ---
 
-#### 3. Get Course with Prerequisites
+#### 3. Get Course with Prerequisites & Assessment Weights
 - **Endpoint**: `GET /api/v1/courses/{course_code}`
 - **Response (`200 OK`)**:
   ```json
   {
-    "course_code": "CS102",
-    "course_name": "Cấu trúc dữ liệu & Giải thuật",
+    "course_code": "CO2003",
+    "course_name": "Cấu trúc dữ liệu và Giải thuật",
     "credits": 4,
     "prerequisites": [
       {
         "course_prerequisite_id": 1,
-        "course_code": "CS102",
-        "related_course_code": "CS101",
+        "course_code": "CO2003",
+        "related_course_code": "CO1005",
         "relation_type": "PREREQ"
       }
-    ]
+    ],
+    "assessment": {
+      "course_code": "CO2003",
+      "course_category": "Core",
+      "quiz": 0,
+      "lab": 20,
+      "btl": 30,
+      "giua_ky": 0,
+      "cuoi_ky": 50
+    }
   }
   ```
 
@@ -520,6 +608,139 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
 - **Endpoint**: `DELETE /api/v1/courses/prerequisites/{prerequisite_id}`
 - **Path Parameters**: `prerequisite_id` (*integer*)
 - **Response (`204 No Content`)**
+
+---
+
+#### 8. Get Course Assessment Weights
+- **Endpoint**: `GET /api/v1/courses/{course_code}/assessment`
+- **Path Parameters**: `course_code` (*string*, e.g. `CO2003`)
+- **Description**: Returns the percentage breakdown of assessment components (quiz, lab, btl, giua_ky, cuoi_ky) and the course category.
+- **Response (`200 OK`)**:
+  ```json
+  {
+    "course_code": "CO2003",
+    "course_category": "Core",
+    "quiz": 0,
+    "lab": 20,
+    "btl": 30,
+    "giua_ky": 0,
+    "cuoi_ky": 50
+  }
+  ```
+- **Error Codes**: `404 Not Found` (if no assessment scheme is registered for this course).
+
+---
+
+### Curriculums & Program Structures
+
+#### 1. List Curriculums
+- **Endpoint**: `GET /api/v1/curriculums/`
+- **Query Parameters**:
+  - `cohort` (*string*, optional): Filter by cohort (e.g. `K20`, `K21`)
+  - `major_code` (*string*, optional): Filter by major code (e.g. `7480201`)
+  - `skip` (*integer*, optional, default: `0`)
+  - `limit` (*integer*, optional, default: `100`)
+- **Response (`200 OK`)**: Array of `CurriculumResponse`:
+  ```json
+  [
+    {
+      "curriculum_id": "KHMT_K20",
+      "curriculum_name": "Chương trình Đào tạo Cử nhân Khoa học Máy tính K20",
+      "major_code": "7480201",
+      "major_name": "Khoa học Máy tính",
+      "cohort": "K20",
+      "academic_year_start": 2020,
+      "total_credits": 128.0,
+      "base_curriculum_id": null,
+      "faculty": "Khoa Khoa học và Kỹ thuật Máy tính"
+    }
+  ]
+  ```
+
+---
+
+#### 2. Get Curriculum Details & Knowledge Blocks
+- **Endpoint**: `GET /api/v1/curriculums/{curriculum_id}`
+- **Path Parameters**: `curriculum_id` (*string*, e.g. `KHMT_K20`)
+- **Description**: Returns curriculum master data along with the grouped knowledge blocks and mapped course structures.
+- **Response (`200 OK`)**:
+  ```json
+  {
+    "curriculum_id": "KHMT_K20",
+    "curriculum_name": "Chương trình Đào tạo Cử nhân Khoa học Máy tính K20",
+    "major_code": "7480201",
+    "major_name": "Khoa học Máy tính",
+    "cohort": "K20",
+    "academic_year_start": 2020,
+    "total_credits": 128.0,
+    "base_curriculum_id": null,
+    "faculty": "Khoa Khoa học và Kỹ thuật Máy tính",
+    "structures": [
+      {
+        "structure_id": 1,
+        "curriculum_id": "KHMT_K20",
+        "course_code": "CO2003",
+        "block_id": "KB_CS_CORE",
+        "course_type": "BB",
+        "elective_group": null,
+        "specialization": null,
+        "credits": 4,
+        "recommended_semester": "HK3",
+        "prerequisites": "CO1005",
+        "knowledge_block": {
+          "block_id": "KB_CS_CORE",
+          "block_code": "CS_CORE",
+          "block_name_vi": "Khối kiến thức Cơ sở nhóm ngành",
+          "block_name_en": "Computer Science Core",
+          "category": "Core",
+          "required_credits": 32.0,
+          "description": "Bắt buộc đối với toàn ngành KHMT"
+        }
+      }
+    ]
+  }
+  ```
+- **Error Codes**: `404 Not Found` (curriculum does not exist).
+
+---
+
+#### 3. Get Curriculum Course Structures
+- **Endpoint**: `GET /api/v1/curriculums/{curriculum_id}/structures`
+- **Path Parameters**: `curriculum_id` (*string*)
+- **Description**: Returns all mapped course allocations in the curriculum, including recommended semester, compulsory/elective designation (`BB`/`TC`), credits, and knowledge block metadata.
+- **Response (`200 OK`)**: Array of `ProgramStructureDetailResponse`.
+
+---
+
+#### 4. List Knowledge Blocks
+- **Endpoint**: `GET /api/v1/curriculums/knowledge-blocks`
+- **Query Parameters**:
+  - `category` (*string*, optional): Filter by category (e.g. `General`, `Core`, `Specialized`)
+  - `skip` (*integer*, optional, default: `0`)
+  - `limit` (*integer*, optional, default: `100`)
+- **Response (`200 OK`)**: Array of `KnowledgeBlockResponse`:
+  ```json
+  [
+    {
+      "block_id": "KB_GENERAL",
+      "block_code": "GENERAL",
+      "block_name_vi": "Khối kiến thức Giáo dục đại cương",
+      "block_name_en": "General Education",
+      "category": "General",
+      "required_credits": 28.0,
+      "description": "Các môn lý luận chính trị, toán, khoa học tự nhiên"
+    },
+    {
+      "block_id": "KB_CS_CORE",
+      "block_code": "CS_CORE",
+      "block_name_vi": "Khối kiến thức Cơ sở nhóm ngành",
+      "block_name_en": "Computer Science Core",
+      "category": "Core",
+      "required_credits": 32.0,
+      "description": "Bắt buộc đối với toàn ngành KHMT"
+    }
+  ]
+  ```
 
 ---
 
@@ -818,12 +1039,44 @@ export interface UserUpdatePayload {
 }
 
 // ==========================================
+// Admin Types
+// ==========================================
+export interface Admin {
+  admin_id: string;
+  department: string;
+  user_id: string | null;
+}
+
+export interface AdminDetail extends Admin {
+  user: User | null;
+}
+
+export interface AdminCreatePayload {
+  admin_id: string;
+  department?: string;
+  user_id?: string | null;
+}
+
+export interface AdminUpdatePayload {
+  department?: string;
+  user_id?: string | null;
+}
+
+// ==========================================
 // Student Types
 // ==========================================
 export interface Student {
   student_id: string;
   cohort: string;
   major: string;
+  program: string | null;
+  specialization: string | null;
+  family_income: string | null;
+  financial_pressure: string | null;
+  living_condition: string | null;
+  english_pass: boolean | null;
+  english_eligibility_by_semester: string | null;
+  ctxh_days_by_semester: string | null;
   user_id: string | null;
 }
 
@@ -835,6 +1088,28 @@ export interface StudentCreatePayload {
   student_id: string;
   cohort: string;
   major: string;
+  program?: string | null;
+  specialization?: string | null;
+  family_income?: string | null;
+  financial_pressure?: string | null;
+  living_condition?: string | null;
+  english_pass?: boolean | null;
+  english_eligibility_by_semester?: string | null;
+  ctxh_days_by_semester?: string | null;
+  user_id?: string | null;
+}
+
+export interface StudentUpdatePayload {
+  cohort?: string;
+  major?: string;
+  program?: string | null;
+  specialization?: string | null;
+  family_income?: string | null;
+  financial_pressure?: string | null;
+  living_condition?: string | null;
+  english_pass?: boolean | null;
+  english_eligibility_by_semester?: string | null;
+  ctxh_days_by_semester?: string | null;
   user_id?: string | null;
 }
 
@@ -889,9 +1164,41 @@ export interface LecturerCreatePayload {
   user_id?: string | null;
 }
 
+export interface LecturerCurrentClassItem {
+  class_id: string;
+  class_group: string;
+  course_code: string;
+  course_name: string;
+  credits: number;
+  semester_code: string;
+  academic_year: string | null;
+  term: number | null;
+  total_students: number;
+}
+
 // ==========================================
-// Course & Prerequisite Types
+// Course, Assessment & Prerequisite Types
 // ==========================================
+export interface CourseAssessment {
+  course_code: string;
+  course_category: string | null;
+  quiz: number;
+  lab: number;
+  btl: number;
+  giua_ky: number;
+  cuoi_ky: number;
+}
+
+export interface CourseAssessmentPayload {
+  course_code: string;
+  course_category?: string | null;
+  quiz?: number;
+  lab?: number;
+  btl?: number;
+  giua_ky?: number;
+  cuoi_ky?: number;
+}
+
 export interface Course {
   course_code: string;
   course_name: string;
@@ -907,6 +1214,7 @@ export interface CoursePrerequisite {
 
 export interface CourseDetail extends Course {
   prerequisites: CoursePrerequisite[];
+  assessment: CourseAssessment | null;
 }
 
 export interface CourseCreatePayload {
@@ -919,6 +1227,75 @@ export interface CoursePrerequisiteCreatePayload {
   course_code: string;
   related_course_code: string;
   relation_type: string;
+}
+
+// ==========================================
+// Curriculum & Knowledge Block Types
+// ==========================================
+export interface Curriculum {
+  curriculum_id: string;
+  curriculum_name: string;
+  major_code: string;
+  major_name: string;
+  cohort: string;
+  academic_year_start: number | null;
+  total_credits: number | null;
+  base_curriculum_id: string | null;
+  faculty: string | null;
+}
+
+export interface KnowledgeBlock {
+  block_id: string;
+  block_code: string | null;
+  block_name_vi: string;
+  block_name_en: string | null;
+  category: string | null;
+  required_credits: number | null;
+  description: string | null;
+}
+
+export interface ProgramStructure {
+  structure_id: number;
+  curriculum_id: string | null;
+  course_code: string | null;
+  block_id: string | null;
+  course_type: string | null; // 'BB', 'TC'
+  elective_group: string | null;
+  specialization: string | null;
+  credits: number | null;
+  recommended_semester: string | null;
+  prerequisites: string | null;
+}
+
+export interface ProgramStructureDetail extends ProgramStructure {
+  curriculum?: Curriculum | null;
+  knowledge_block?: KnowledgeBlock | null;
+}
+
+export interface CurriculumDetail extends Curriculum {
+  structures: ProgramStructureDetail[];
+}
+
+export interface CurriculumCreatePayload {
+  curriculum_id: string;
+  curriculum_name: string;
+  major_code: string;
+  major_name: string;
+  cohort: string;
+  academic_year_start?: number | null;
+  total_credits?: number | null;
+  base_curriculum_id?: string | null;
+  faculty?: string | null;
+}
+
+export interface KnowledgeBlockCreatePayload {
+  block_id: string;
+  block_code?: string | null;
+  block_name_vi: string;
+  block_name_en?: string | null;
+  category?: string | null;
+  required_credits?: number | null;
+  description?: string | null;
 }
 
 // ==========================================
@@ -984,7 +1361,7 @@ export interface Enrollment {
   btl: number | null;
   giua_ky: number | null;
   cuoi_ky: number | null;
-  final_score: number | null;
+  final_score: number | null; // Standard 0.0-10.0, or 12.0 for English exemption (Exempted)
   letter_grade: string | null;
   gpa_4: number | null;
   passed: boolean | null;

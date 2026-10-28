@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom"
 import { ProtectedRoute, GuestRoute } from "@/components/layout/ProtectedRoute"
 import { StudentLayout } from "@/components/layout/StudentLayout"
+import { LecturerLayout } from "@/components/layout/LecturerLayout"
 import { LoginForm, useAuthUser, ROLE_DEFAULT_REDIRECT } from "@/features/auth"
 import {
   StudentOverviewPage,
@@ -9,6 +10,12 @@ import {
   StudentAlertsPage,
   StudentSettingsPage,
 } from "@/features/students"
+import {
+  LecturerDashboardPage,
+  LecturerClassesPage,
+  LecturerInterventionsPage,
+  LecturerSettingsPage,
+} from "@/features/lecturers"
 
 const RootRedirect = () => {
   const { data: user, isLoading } = useAuthUser()
@@ -48,8 +55,29 @@ const appRouter = createBrowserRouter([
     element: <ProtectedRoute allowedRoles={["lecturer", "admin"]} />,
     children: [
       {
-        path: "classes",
-        element: <div className="p-6 font-medium">Lecturer Class Roster & Student Risk XAI</div>,
+        element: <LecturerLayout />,
+        children: [
+          {
+            index: true,
+            element: <Navigate to="/lecturer/dashboard" replace />,
+          },
+          {
+            path: "dashboard",
+            element: <LecturerDashboardPage />,
+          },
+          {
+            path: "classes",
+            element: <LecturerClassesPage />,
+          },
+          {
+            path: "alerts",
+            element: <LecturerInterventionsPage />,
+          },
+          {
+            path: "settings",
+            element: <LecturerSettingsPage />,
+          },
+        ],
       },
     ],
   },

@@ -133,6 +133,18 @@ export interface LecturerUpdatePayload {
   user_id?: string | null
 }
 
+export interface LecturerCurrentClassItem {
+  class_id: string
+  class_group: string
+  course_code: string
+  course_name: string
+  credits: number
+  semester_code: string
+  academic_year: string | null
+  term: number | null
+  total_students: number
+}
+
 // ==========================================
 // Course & Prerequisite Types
 // ==========================================
@@ -177,6 +189,7 @@ export interface Semester {
   semester_code: string
   academic_year: string
   term: number
+  is_active?: boolean
 }
 
 export interface SemesterCreatePayload {

@@ -25,7 +25,7 @@ export interface TokenResponseDTO {
 
 export const ROLE_DEFAULT_REDIRECT: Record<UserRole, string> = {
   admin: "/admin/dashboard",
-  lecturer: "/lecturer/classes",
+  lecturer: "/lecturer/dashboard",
   student: "/student/overview",
 }
 
