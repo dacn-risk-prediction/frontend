@@ -13,6 +13,7 @@ import { useAuthUser } from "@/features/auth";
 import {
   ArrowRight,
   Award,
+  Bell,
   BookOpen,
   GraduationCap,
   Minus,
@@ -23,7 +24,11 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useStudentCurrentCourses, useStudentSummary } from "../api/student-api";
+import {
+  useStudentCurrentCourses,
+  useStudentEnrollments,
+  useStudentSummary,
+} from "../api/student-api";
 
 // Standard Bachelor Degree Credit Requirement
 const DEGREE_TOTAL_CREDITS = 128;
@@ -42,17 +47,58 @@ export const StudentOverviewPage = () => {
   const { data: currentCourses, isLoading: isLoadingCourses } =
     useStudentCurrentCourses(studentId);
 
+  // Fetch student enrollments to identify exempted courses (final_score === 12)
+  const { data: enrollments } = useStudentEnrollments(studentId);
+
+  // Lookup set of exempted courses (final_score === 12)
+  const exemptedCourseSet = useMemo(() => {
+    const codes = new Set<string>();
+    const classIds = new Set<string>();
+    if (enrollments) {
+      for (const e of enrollments) {
+        if (
+          e.final_score !== null &&
+          e.final_score !== undefined &&
+          Number(e.final_score) === 12
+        ) {
+          codes.add(e.course_code);
+          if (e.class_id) classIds.add(e.class_id);
+        }
+      }
+    }
+    return { codes, classIds };
+  }, [enrollments]);
+
+  // Filter current courses to only show actively studied courses (excluding exempted courses with final_score = 12)
+  const activeCurrentCourses = useMemo(() => {
+    if (!currentCourses) return [];
+    return currentCourses.filter((c) => {
+      if (c.class_id && exemptedCourseSet.classIds.has(c.class_id)) {
+        return false;
+      }
+      if (exemptedCourseSet.codes.has(c.course_code)) {
+        return false;
+      }
+      return true;
+    });
+  }, [currentCourses, exemptedCourseSet]);
+
   // 1. Personalized Greeting name
   const greetingName = user?.name
     ? user.name.split(" ").slice(-1)[0]
     : "Nguyen";
 
-  // Check if student is a brand new freshman with only 1 in-progress semester
+  // Check if student is a brand new freshman with only 1 in-progress semester (even if they have exempted English courses)
+  const hasCompletedGradedSemester = Boolean(
+    summary?.semester_gpas?.some(
+      (s) => Number(s.semester_gpa ?? s.gpa ?? 0) > 0,
+    ),
+  );
   const isFirstTermOnly =
     Boolean(summary) &&
-    summary?.total_passed_credits === 0 &&
-    summary?.passed_courses_count === 0 &&
-    summary?.failed_courses_count === 0;
+    !hasCompletedGradedSemester &&
+    Number(summary?.cumulative_gpa ?? 0) === 0 &&
+    Number(summary?.failed_courses_count ?? 0) === 0;
 
   // 2. Real Cumulative GPA & Delta computation
   const cumulativeGpa = summary?.cumulative_gpa ?? 3.2;
@@ -60,11 +106,14 @@ export const StudentOverviewPage = () => {
   // Compute GPA change from the last two COMPLETED semesters (ignoring active in-progress terms with 0.0)
   const gpaDelta = useMemo(() => {
     if (summary?.semester_gpas && summary.semester_gpas.length >= 1) {
-      // Completed semesters have finalized GPA or passed credits
+      // Completed semesters with finalized numeric GPA
       const completedList = summary.semester_gpas.filter(
-        (s) =>
-          Number(s.semester_gpa ?? s.gpa ?? 0) > 0 ||
-          Number(s.passed_credits ?? 0) > 0,
+        (s, idx, arr) =>
+          !(
+            idx === arr.length - 1 &&
+            Number(s.semester_gpa ?? s.gpa ?? 0) === 0 &&
+            Number(s.attempted_credits ?? 0) > 0
+          ) && Number(s.semester_gpa ?? s.gpa ?? 0) > 0,
       );
 
       if (completedList.length >= 2) {
@@ -84,8 +133,30 @@ export const StudentOverviewPage = () => {
     return 0.1; // Default baseline
   }, [summary]);
 
-  // 3. Real Credits Passed & Progress Computation
-  const passedCredits = summary?.total_passed_credits ?? 112;
+  // 3. Real Credits Passed & Progress Computation (includes exempted credits with final_score = 12)
+  const uncountedExemptedCredits = useMemo(() => {
+    if (!enrollments) return 0;
+    const courseCreditsMap = new Map<string, number>();
+    if (currentCourses) {
+      for (const c of currentCourses) {
+        courseCreditsMap.set(c.course_code, Number(c.credits) || 0);
+      }
+    }
+    return enrollments.reduce((acc, e) => {
+      if (
+        e.final_score !== null &&
+        e.final_score !== undefined &&
+        Number(e.final_score) === 12 &&
+        e.passed !== true
+      ) {
+        return acc + (courseCreditsMap.get(e.course_code) ?? 0);
+      }
+      return acc;
+    }, 0);
+  }, [enrollments, currentCourses]);
+
+  const passedCredits =
+    (summary?.total_passed_credits ?? 112) + uncountedExemptedCredits;
   const creditsPercentage = Math.min(
     100,
     Math.round((passedCredits / DEGREE_TOTAL_CREDITS) * 100),
@@ -144,16 +215,19 @@ export const StudentOverviewPage = () => {
   }, [summary]);
 
   const currentTermEnrollment = useMemo(() => {
-    if (currentCourses && currentCourses.length > 0) {
-      const credits = currentCourses.reduce(
+    if (currentCourses !== undefined) {
+      const credits = activeCurrentCourses.reduce(
         (acc, c) => acc + (Number(c.credits) || 0),
         0,
       );
-      const termCode = currentCourses[0]?.class_id?.split("_")[0] || "HK261";
+      const termCode =
+        activeCurrentCourses[0]?.class_id?.split("_")[0] ||
+        currentCourses[0]?.class_id?.split("_")[0] ||
+        "HK261";
       return {
         termCode,
         credits,
-        classesCount: currentCourses.length,
+        classesCount: activeCurrentCourses.length,
       };
     }
 
@@ -171,18 +245,17 @@ export const StudentOverviewPage = () => {
       credits: 0,
       classesCount: 0,
     };
-  }, [currentCourses, summary]);
+  }, [currentCourses, activeCurrentCourses, summary]);
 
   // 5. Dynamic GPA Trend Line Chart mapping real semester_gpas
   const displaySemesters = useMemo(() => {
     if (summary?.semester_gpas && summary.semester_gpas.length > 0) {
       return summary.semester_gpas.map((s, idx, arr) => {
         const rawGpa = Number(s.semester_gpa ?? s.gpa ?? 0);
-        // Detect if this is the active in-progress term (last term, gpa 0.0, 0 passed credits, but has attempted credits)
+        // Detect if this is the active in-progress term (last term, gpa 0.0, and has attempted credits)
         const isInProgress =
           idx === arr.length - 1 &&
           rawGpa === 0 &&
-          Number(s.passed_credits ?? 0) === 0 &&
           Number(s.attempted_credits ?? 0) > 0;
 
         return {
@@ -285,6 +358,16 @@ export const StudentOverviewPage = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate("/student/alerts")}
+            className="h-8 cursor-pointer gap-1.5 border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-blue-700"
+          >
+            <Bell className="h-3.5 w-3.5 text-blue-600" />
+            <span>Academic Alerts</span>
+            <ArrowRight className="h-3 w-3 text-slate-400" />
+          </Button>
           <Badge
             variant="outline"
             className="border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-2xs"
@@ -761,18 +844,32 @@ export const StudentOverviewPage = () => {
               <CardTitle className="text-lg font-bold text-slate-900">
                 Registered Courses
               </CardTitle>
-              <Badge
-                variant="outline"
-                className="border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700"
-              >
-                {isLoadingCourses
-                  ? "Loading..."
-                  : isGraduated
-                    ? "Graduated"
-                    : `${currentCourses?.length ?? 0} ${
-                        (currentCourses?.length ?? 0) === 1 ? "Course" : "Courses"
-                      }`}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 cursor-pointer gap-1.5 border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-blue-700"
+                  onClick={() => navigate("/student/alerts")}
+                >
+                  <Bell className="h-3.5 w-3.5 text-blue-600" />
+                  <span>Alerts</span>
+                  <ArrowRight className="h-3 w-3 text-slate-400" />
+                </Button>
+                <Badge
+                  variant="outline"
+                  className="border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700"
+                >
+                  {isLoadingCourses
+                    ? "Loading..."
+                    : isGraduated
+                      ? "Graduated"
+                      : `${activeCurrentCourses.length} ${
+                          activeCurrentCourses.length === 1
+                            ? "Course"
+                            : "Courses"
+                        }`}
+                </Badge>
+              </div>
             </div>
             <CardDescription className="text-xs text-slate-500">
               Semester 261 • Active Enrollment
@@ -810,7 +907,7 @@ export const StudentOverviewPage = () => {
                   active course registrations for the current semester.
                 </p>
               </div>
-            ) : !currentCourses || currentCourses.length === 0 ? (
+            ) : activeCurrentCourses.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500">
                   <BookOpen className="h-6 w-6" />
@@ -824,52 +921,75 @@ export const StudentOverviewPage = () => {
               </div>
             ) : (
               <div className="max-h-95 space-y-3 overflow-y-auto pr-1">
-                {currentCourses.map((course) => (
-                  <div
-                    key={course.class_id || course.course_code}
-                    className="rounded-lg border border-slate-100 bg-slate-50/70 p-3.5 transition-colors hover:bg-slate-50"
-                  >
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-mono text-xs font-bold text-slate-900">
-                        {course.course_code}
-                      </span>
-                      {course.class_group && (
-                        <Badge
-                          variant="outline"
-                          className="h-4.5 border-slate-200 bg-white px-1.5 text-[10px] font-medium text-slate-600"
-                        >
-                          Group {course.class_group}
-                        </Badge>
-                      )}
-                      <Badge
-                        variant="secondary"
-                        className="h-4.5 border border-blue-100 bg-blue-50 px-1.5 text-[10px] font-medium text-blue-700"
-                      >
-                        {course.credits}{" "}
-                        {course.credits === 1 ? "credit" : "credits"}
-                      </Badge>
-                      {course.retaken && (
-                        <Badge
-                          variant="outline"
-                          className="h-4.5 border-amber-200 bg-amber-50 px-1.5 text-[10px] font-semibold text-amber-700"
-                        >
-                          Retaken
-                        </Badge>
-                      )}
-                    </div>
-
-                    <p className="mt-1.5 text-xs font-semibold text-slate-800">
-                      {course.course_name}
-                    </p>
-
-                    {course.lecturer_name && (
-                      <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500">
-                        <User className="h-3 w-3 shrink-0 text-slate-400" />
-                        <span className="truncate">{course.lecturer_name}</span>
+                {activeCurrentCourses.map((course) => {
+                  return (
+                    <div
+                      key={course.class_id || course.course_code}
+                      className="rounded-lg border border-slate-100 bg-slate-50/70 p-3.5 transition-colors hover:bg-slate-50"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-xs font-bold text-slate-900">
+                            {course.course_code}
+                          </span>
+                          {course.class_group && (
+                            <Badge
+                              variant="outline"
+                              className="h-4.5 border-slate-200 bg-white px-1.5 text-[10px] font-medium text-slate-600"
+                            >
+                              Group {course.class_group}
+                            </Badge>
+                          )}
+                          <Badge
+                            variant="secondary"
+                            className="h-4.5 border border-blue-100 bg-blue-50 px-1.5 text-[10px] font-medium text-blue-700"
+                          >
+                            {course.credits}{" "}
+                            {course.credits === 1 ? "credit" : "credits"}
+                          </Badge>
+                          {course.retaken && (
+                            <Badge
+                              variant="outline"
+                              className="h-4.5 border-amber-200 bg-amber-50 px-1.5 text-[10px] font-semibold text-amber-700"
+                            >
+                              Retaken
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      <p className="mt-1.5 text-xs font-semibold text-slate-800">
+                        {course.course_name}
+                      </p>
+
+                      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[11px] text-slate-500">
+                        {course.lecturer_name ? (
+                          <div className="flex items-center gap-1.5">
+                            <User className="h-3 w-3 shrink-0 text-slate-400" />
+                            <span className="truncate max-w-40">
+                              {course.lecturer_name}
+                            </span>
+                          </div>
+                        ) : (
+                          <div />
+                        )}
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 cursor-pointer px-1.5 text-[10px] font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                          onClick={() =>
+                            navigate(
+                              `/student/simulation?course=${course.course_code}`
+                            )
+                          }
+                        >
+                          Simulate &rarr;
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -900,7 +1020,7 @@ export const StudentOverviewPage = () => {
 
             <p className="text-sm leading-relaxed text-blue-50/90 sm:text-base">
               Test different grades and scenarios to understand what could
-              improve your academic risk profile — with transparent AI
+              improve your academic performance — with transparent AI
               explanations at every step.
             </p>
           </div>
@@ -909,7 +1029,7 @@ export const StudentOverviewPage = () => {
             <Button
               size="lg"
               className="group cursor-pointer rounded-xl bg-white px-6 py-3 font-semibold text-blue-700 shadow-md transition-all hover:bg-blue-50 hover:shadow-lg active:scale-95"
-              onClick={() => navigate("/student/what-if")}
+              onClick={() => navigate("/student/simulation")}
             >
               <span>Launch Simulator</span>
               <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />

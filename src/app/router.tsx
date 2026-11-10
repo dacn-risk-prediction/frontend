@@ -7,6 +7,7 @@ import {
   StudentOverviewPage,
   StudentAcademicRecordPage,
   StudentWhatIfPage,
+  StudentSimulationPage,
   StudentAlertsPage,
   StudentSettingsPage,
 } from "@/features/students"
@@ -104,6 +105,14 @@ const appRouter = createBrowserRouter([
           {
             path: "what-if",
             element: <StudentWhatIfPage />,
+          },
+          {
+            path: "simulation",
+            element: <StudentSimulationPage />,
+          },
+          {
+            path: "prediction",
+            element: <StudentSimulationPage />,
           },
           {
             path: "alerts",

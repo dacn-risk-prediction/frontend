@@ -176,7 +176,27 @@ export const StudentAcademicRecordPage = () => {
     return "HK172";
   }, [summary]);
 
-  const passedCredits = summary?.total_passed_credits ?? 0;
+  const uncountedExemptedCredits = useMemo(() => {
+    if (!enrollments) return 0;
+    const courseMap = new Map(
+      (allCourses ?? []).map((c) => [c.course_code, c]),
+    );
+    return enrollments.reduce((acc, e) => {
+      if (
+        e.final_score !== null &&
+        e.final_score !== undefined &&
+        Number(e.final_score) === 12 &&
+        e.passed !== true
+      ) {
+        const creds = courseMap.get(e.course_code)?.credits ?? 0;
+        return acc + creds;
+      }
+      return acc;
+    }, 0);
+  }, [enrollments, allCourses]);
+
+  const passedCredits =
+    (summary?.total_passed_credits ?? 0) + uncountedExemptedCredits;
   const cumulativeGpa = summary?.cumulative_gpa ?? 0.0;
   const creditsPercentage = Math.min(
     100,
@@ -212,6 +232,27 @@ export const StudentAcademicRecordPage = () => {
       (allCourses ?? []).map((c) => [c.course_code, c]),
     );
 
+    const exemptedCourseSet = new Set<string>();
+    const exemptedClassIds = new Set<string>();
+    const semestersWithRawEnrollments = new Set<string>();
+
+    if (enrollments && enrollments.length > 0) {
+      for (const e of enrollments) {
+        semestersWithRawEnrollments.add(e.semester_code);
+        if (
+          e.final_score !== null &&
+          e.final_score !== undefined &&
+          Number(e.final_score) === 12
+        ) {
+          exemptedCourseSet.add(`${e.semester_code}_${e.course_code}`);
+          exemptedCourseSet.add(e.course_code);
+          if (e.class_id) {
+            exemptedClassIds.add(e.class_id);
+          }
+        }
+      }
+    }
+
     // Map semesterCode -> semester summary metadata
     const summaryMap = new Map<
       string,
@@ -232,7 +273,6 @@ export const StudentAcademicRecordPage = () => {
         const isInProgress =
           idx === arr.length - 1 &&
           rawGpa === 0 &&
-          Number(s.passed_credits ?? 0) === 0 &&
           Number(s.attempted_credits ?? 0) > 0;
 
         summaryMap.set(s.semester_code, {
@@ -252,9 +292,16 @@ export const StudentAcademicRecordPage = () => {
     // Group courses by semesterCode
     const coursesBySemester = new Map<string, SemesterCourseItem[]>();
 
-    // 1. Historical enrollments
+    // 1. Historical enrollments (excluding exempted courses with final_score = 12)
     if (enrollments && enrollments.length > 0) {
       for (const e of enrollments) {
+        if (
+          e.final_score !== null &&
+          e.final_score !== undefined &&
+          Number(e.final_score) === 12
+        ) {
+          continue;
+        }
         semesterSet.add(e.semester_code);
         const catalogCourse = courseMap.get(e.course_code);
         const isPass =
@@ -284,47 +331,63 @@ export const StudentAcademicRecordPage = () => {
       }
     }
 
-    // 2. Active current registered courses
+    // 2. Active current registered courses (excluding exempted courses with final_score = 12)
     if (currentCourses && currentCourses.length > 0) {
       const currentTermCode =
         currentCourses[0]?.class_id?.split("_")[0] || "HK261";
-      semesterSet.add(currentTermCode);
-      const list = coursesBySemester.get(currentTermCode) || [];
-      for (const item of currentCourses) {
-        const alreadyExists = list.some(
-          (c) => c.courseCode === item.course_code,
-        );
-        if (!alreadyExists) {
-          list.push({
-            id:
-              item.class_id ||
-              `${currentTermCode.toLowerCase()}_${item.course_code}`,
-            courseCode: item.course_code,
-            courseName: item.course_name,
-            credits: item.credits,
-            classId: item.class_id,
-            classGroup: item.class_group,
-            lecturerName: item.lecturer_name,
-            semesterCode: currentTermCode,
-            letterGrade: null,
-            gpa4: null,
-            finalScore: null,
-            quiz: null,
-            giuaKy: null,
-            cuoiKy: null,
-            passed: null,
-            retaken: Boolean(item.retaken),
-            status: "enrolled",
-          });
+      const activeItems = currentCourses.filter(
+        (item) =>
+          !(item.class_id && exemptedClassIds.has(item.class_id)) &&
+          !exemptedCourseSet.has(`${currentTermCode}_${item.course_code}`) &&
+          !exemptedCourseSet.has(item.course_code),
+      );
+      if (activeItems.length > 0) {
+        semesterSet.add(currentTermCode);
+        const list = coursesBySemester.get(currentTermCode) || [];
+        for (const item of activeItems) {
+          const alreadyExists = list.some(
+            (c) => c.courseCode === item.course_code,
+          );
+          if (!alreadyExists) {
+            list.push({
+              id:
+                item.class_id ||
+                `${currentTermCode.toLowerCase()}_${item.course_code}`,
+              courseCode: item.course_code,
+              courseName: item.course_name,
+              credits: item.credits,
+              classId: item.class_id,
+              classGroup: item.class_group,
+              lecturerName: item.lecturer_name,
+              semesterCode: currentTermCode,
+              letterGrade: null,
+              gpa4: null,
+              finalScore: null,
+              quiz: null,
+              giuaKy: null,
+              cuoiKy: null,
+              passed: null,
+              retaken: Boolean(item.retaken),
+              status: "enrolled",
+            });
+          }
         }
+        coursesBySemester.set(currentTermCode, list);
       }
-      coursesBySemester.set(currentTermCode, list);
     }
 
-    // Sort semester codes from newest to oldest (descending rank)
-    const sortedCodes = Array.from(semesterSet).sort(
-      (a, b) => parseSemesterRank(b) - parseSemesterRank(a),
-    );
+    // Sort semester codes from newest to oldest (descending rank), excluding semesters that only contained exempted courses
+    const sortedCodes = Array.from(semesterSet)
+      .filter((code) => {
+        if (
+          semestersWithRawEnrollments.has(code) &&
+          (coursesBySemester.get(code)?.length ?? 0) === 0
+        ) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => parseSemesterRank(b) - parseSemesterRank(a));
 
     const activeTermCode =
       currentCourses?.[0]?.class_id?.split("_")[0] || "HK261";

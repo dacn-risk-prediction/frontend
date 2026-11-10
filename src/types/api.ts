@@ -54,6 +54,10 @@ export interface Student {
   student_id: string
   cohort: string
   major: string
+  program?: string | null
+  specialization?: string | null
+  english_pass?: boolean | null
+  ctxh_days?: number | null
   user_id: string | null
 }
 
@@ -65,12 +69,20 @@ export interface StudentCreatePayload {
   student_id: string
   cohort: string
   major: string
+  program?: string | null
+  specialization?: string | null
+  english_pass?: boolean | null
+  ctxh_days?: number | null
   user_id?: string | null
 }
 
 export interface StudentUpdatePayload {
   cohort?: string
   major?: string
+  program?: string | null
+  specialization?: string | null
+  english_pass?: boolean | null
+  ctxh_days?: number | null
   user_id?: string | null
 }
 
@@ -283,4 +295,72 @@ export interface EnrollmentUpdatePayload {
   final_gpa_4?: number | null
   status?: string | null
 }
+
+// ==========================================
+// Prediction & Explainable AI (XAI) Types
+// ==========================================
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH'
+export type ShapImpact = 'INCREASE_RISK' | 'DECREASE_RISK'
+
+export interface ShapFactorResponse {
+  feature: string
+  shap_value: number
+  impact: ShapImpact
+  description: string
+}
+
+export interface CoursePredictionResponse {
+  course_code: string
+  course_name: string | null
+  credits: number | null
+  class_id: string | null
+  class_group: string | null
+  lecturer_name: string | null
+  semester_code: string
+  record_status: string | null
+  fail_probability: number
+  predicted_course_fail: number // 0 (Pass) or 1 (Fail)
+  is_at_risk: boolean
+  risk_level: RiskLevel
+  predicted_score10: number
+  predicted_gpa4: number
+  current_marks: {
+    quiz?: number | null
+    lab?: number | null
+    btl?: number | null
+    giua_ky?: number | null
+    [key: string]: number | null | undefined
+  }
+  top_shap_factors: ShapFactorResponse[]
+}
+
+export interface StudentPredictionResponse {
+  student_id: string
+  semester_code: string
+  total_courses: number
+  at_risk_count: number
+  predicted_semester_gpa4: number
+  courses: CoursePredictionResponse[]
+}
+
+export interface PredictCourseRequest {
+  student_id: string
+  course_code: string
+  semester_code?: string | null
+}
+
+export interface PredictStudentRequest {
+  student_id: string
+  semester_code?: string | null
+}
+
+export interface ModelHealthResponse {
+  status: string
+  service: string
+  model_status: 'loaded' | 'not_loaded' | string
+  fail_threshold: number
+  total_records_cached: number
+  metrics: Record<string, any>
+}
+
 

@@ -22,6 +22,7 @@
    - [Semesters](#semesters)
    - [Academic Classes](#academic-classes)
    - [Enrollments & Grades](#enrollments--grades)
+   - [Predictions & Explainable AI (XAI)](#predictions--explainable-ai-xai)
    - [System Health](#system-health)
 5. [TypeScript Interfaces & DTOs](#5-typescript-interfaces--dtos)
 6. [Axios API Client Example with Token Refresh](#6-axios-api-client-example-with-token-refresh)
@@ -257,12 +258,8 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
       "major": "Khoa hoc May tinh",
       "program": "Dai tra",
       "specialization": "Cong nghe phan mem",
-      "family_income": "Trung binh",
-      "financial_pressure": "Thap",
-      "living_condition": "Ky tuc xa",
       "english_pass": true,
-      "english_eligibility_by_semester": "HK261:DAT",
-      "ctxh_days_by_semester": "HK261:15",
+      "ctxh_days": 15,
       "user_id": "123e4567-e89b-12d3-a456-426614174000"
     }
   ]
@@ -280,12 +277,8 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
     "major": "Khoa hoc May tinh",
     "program": "Dai tra",
     "specialization": "Cong nghe phan mem",
-    "family_income": "Trung binh",
-    "financial_pressure": "Thap",
-    "living_condition": "Ky tuc xa",
     "english_pass": true,
-    "english_eligibility_by_semester": "HK261:DAT",
-    "ctxh_days_by_semester": "HK261:15",
+    "ctxh_days": 15,
     "user_id": "123e4567-e89b-12d3-a456-426614174000"
   }
   ```
@@ -304,12 +297,8 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
     "major": "Khoa hoc May tinh",
     "program": "Dai tra",
     "specialization": "Cong nghe phan mem",
-    "family_income": "Trung binh",
-    "financial_pressure": "Thap",
-    "living_condition": "Ky tuc xa",
     "english_pass": true,
-    "english_eligibility_by_semester": "HK261:DAT",
-    "ctxh_days_by_semester": "HK261:15",
+    "ctxh_days": 15,
     "user_id": "123e4567-e89b-12d3-a456-426614174000",
     "user": {
       "id": "123e4567-e89b-12d3-a456-426614174000",
@@ -414,12 +403,8 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
     "major": "Khoa hoc May tinh",
     "program": "Dai tra",
     "specialization": "He thong thong tin",
-    "family_income": "Kha",
-    "financial_pressure": "Thap",
-    "living_condition": "Nha rieng",
     "english_pass": true,
-    "english_eligibility_by_semester": "HK261:DAT",
-    "ctxh_days_by_semester": "HK261:18",
+    "ctxh_days": 18,
     "user_id": "123e4567-e89b-12d3-a456-426614174000"
   }
   ```
@@ -970,6 +955,201 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
 
 ---
 
+### Predictions & Explainable AI (XAI)
+
+> **Module Base Path**: `/api/v1/predictions`  
+> **Underlying Service**: AI Model Service (port `8001`), loaded with ML classification models for course failure prediction & TreeSHAP explanation extraction.  
+> **RBAC & Data Protection**:
+> - `student`: Enforces strict resource ownership — students can **only** access their own predictions (`student_id == current_user.user_code`). Attempting to predict or view other students returns `403 Forbidden`.
+> - `lecturer` & `admin`: Authorized to access predictions for any student across classes.
+
+#### 1. Check AI Model Service Status
+- **Endpoint**: `GET /api/v1/predictions/health`
+- **Auth Required**: No
+- **Description**: Checks operational status of the upstream AI Model Service, verification of model loaded in memory, decision fail threshold, cached enrollment records, and evaluation metrics.
+- **Response (`200 OK`)**:
+  ```json
+  {
+    "status": "ok",
+    "service": "dacn-model-service",
+    "model_status": "loaded",
+    "fail_threshold": 0.9309,
+    "total_records_cached": 424158,
+    "metrics": {
+      "accuracy": 0.985,
+      "f1_score": 0.923,
+      "auc_roc": 0.988
+    }
+  }
+  ```
+- **Error Codes**: `503 Service Unavailable` (model service is offline or models are not yet loaded).
+
+---
+
+#### 2. Predict Outcome and XAI Factors for a Single Course
+- **Endpoint**: `POST /api/v1/predictions/course`
+- **Auth Required**: Yes (`Bearer <access_token>`)
+- **Request Body**:
+  ```json
+  {
+    "student_id": "2100512",
+    "course_code": "CO2017",
+    "semester_code": "HK261"
+  }
+  ```
+  *(Note: `semester_code` is optional; if omitted, defaults to the ongoing/current active term).*
+- **Description**: Predicts the probability of failing the course (`fail_probability`), expected score on 10-scale and 4-scale, binary risk warning (`is_at_risk`), risk severity level (`LOW`, `MEDIUM`, `HIGH`), and returns top SHAP contributing features with Vietnamese explanation strings. Metadata (course name, credits, class group, lecturer name) is automatically enriched from the database.
+- **Response (`200 OK`)**:
+  ```json
+  {
+    "course_code": "CO2017",
+    "course_name": "Hệ điều hành",
+    "credits": 3,
+    "class_id": "HK261_CO2017_L01",
+    "class_group": "L01",
+    "lecturer_name": "Nguyễn Văn B",
+    "semester_code": "HK261",
+    "record_status": null,
+    "fail_probability": 0.0207,
+    "predicted_course_fail": 0,
+    "is_at_risk": false,
+    "risk_level": "LOW",
+    "predicted_score10": 6.15,
+    "predicted_gpa4": 2.0,
+    "current_marks": {
+      "quiz": null,
+      "lab": null,
+      "btl": null,
+      "giua_ky": 5.5
+    },
+    "top_shap_factors": [
+      {
+        "feature": "giua_ky",
+        "shap_value": -1.7865,
+        "impact": "DECREASE_RISK",
+        "description": "Điểm giữa kỳ (5.5) góp phần giảm nguy cơ rớt môn"
+      },
+      {
+        "feature": "cumulative_gpa",
+        "shap_value": -0.8542,
+        "impact": "DECREASE_RISK",
+        "description": "Điểm trung bình tích lũy ổn định giúp giảm nguy cơ rớt môn"
+      }
+    ]
+  }
+  ```
+- **Error Codes**:
+  - `401 Unauthorized`
+  - `403 Forbidden`: When a student tries to query another student's prediction.
+  - `404 Not Found`: Student or course not found in database or model records.
+  - `422 Unprocessable Content`: Missing or invalid input.
+  - `503 Service Unavailable`: AI model service unavailable.
+
+---
+
+#### 3. Predict All Courses in Active Semester for a Student (GET)
+- **Endpoint**: `GET /api/v1/predictions/students/{student_id}`
+- **Auth Required**: Yes (`Bearer <access_token>`)
+- **Path Parameters**: `student_id` (*string*, student ID / MSSV)
+- **Query Parameters**:
+  - `semester_code` (*string*, optional): Target academic semester (e.g. `HK261`). Defaults to current active semester if omitted.
+- **Description**: Returns holistic academic risk predictions across all courses the student is enrolled in for the target semester, including total courses, number of at-risk courses, expected weighted semester GPA on 4.0 scale (`predicted_semester_gpa4`), and granular per-course predictions with SHAP XAI factors.
+- **Response (`200 OK`)**:
+  ```json
+  {
+    "student_id": "2100512",
+    "semester_code": "HK261",
+    "total_courses": 2,
+    "at_risk_count": 1,
+    "predicted_semester_gpa4": 2.15,
+    "courses": [
+      {
+        "course_code": "CO2017",
+        "course_name": "Hệ điều hành",
+        "credits": 3,
+        "class_id": "HK261_CO2017_L01",
+        "class_group": "L01",
+        "lecturer_name": "Nguyễn Văn B",
+        "semester_code": "HK261",
+        "record_status": null,
+        "fail_probability": 0.0207,
+        "predicted_course_fail": 0,
+        "is_at_risk": false,
+        "risk_level": "LOW",
+        "predicted_score10": 6.15,
+        "predicted_gpa4": 2.0,
+        "current_marks": {
+          "quiz": null,
+          "lab": null,
+          "btl": null,
+          "giua_ky": 5.5
+        },
+        "top_shap_factors": [
+          {
+            "feature": "giua_ky",
+            "shap_value": -1.7865,
+            "impact": "DECREASE_RISK",
+            "description": "Điểm giữa kỳ (5.5) góp phần giảm nguy cơ rớt môn"
+          }
+        ]
+      },
+      {
+        "course_code": "CO3001",
+        "course_name": "Công nghệ phần mềm",
+        "credits": 3,
+        "class_id": "HK261_CO3001_L02",
+        "class_group": "L02",
+        "lecturer_name": "Trần Thị C",
+        "semester_code": "HK261",
+        "record_status": null,
+        "fail_probability": 0.852,
+        "predicted_course_fail": 1,
+        "is_at_risk": true,
+        "risk_level": "HIGH",
+        "predicted_score10": 3.8,
+        "predicted_gpa4": 0.0,
+        "current_marks": {
+          "quiz": 3.0,
+          "lab": null,
+          "btl": null,
+          "giua_ky": 3.5
+        },
+        "top_shap_factors": [
+          {
+            "feature": "giua_ky",
+            "shap_value": 2.145,
+            "impact": "INCREASE_RISK",
+            "description": "Điểm giữa kỳ thấp (3.5) là yếu tố chính làm tăng nguy cơ rớt môn"
+          }
+        ]
+      }
+    ]
+  }
+  ```
+- **Error Codes**:
+  - `401 Unauthorized`
+  - `403 Forbidden`
+  - `404 Not Found`: Student does not exist or has no registered courses in the semester.
+  - `503 Service Unavailable`
+
+---
+
+#### 4. Predict Term Outcomes for a Student (POST)
+- **Endpoint**: `POST /api/v1/predictions/student`
+- **Auth Required**: Yes (`Bearer <access_token>`)
+- **Request Body**:
+  ```json
+  {
+    "student_id": "2100512",
+    "semester_code": "HK261"
+  }
+  ```
+  *(Note: `semester_code` is optional).*
+- **Description**: Alternative POST endpoint for `GET /api/v1/predictions/students/{student_id}` accepting a JSON body.
+- **Response (`200 OK`)**: Array/object identical to `StudentPredictionResponse`.
+
+---
+
 ### System Health
 
 #### Health Check
@@ -1071,12 +1251,8 @@ export interface Student {
   major: string;
   program: string | null;
   specialization: string | null;
-  family_income: string | null;
-  financial_pressure: string | null;
-  living_condition: string | null;
   english_pass: boolean | null;
-  english_eligibility_by_semester: string | null;
-  ctxh_days_by_semester: string | null;
+  ctxh_days: number | null;
   user_id: string | null;
 }
 
@@ -1090,12 +1266,8 @@ export interface StudentCreatePayload {
   major: string;
   program?: string | null;
   specialization?: string | null;
-  family_income?: string | null;
-  financial_pressure?: string | null;
-  living_condition?: string | null;
   english_pass?: boolean | null;
-  english_eligibility_by_semester?: string | null;
-  ctxh_days_by_semester?: string | null;
+  ctxh_days?: number | null;
   user_id?: string | null;
 }
 
@@ -1104,12 +1276,8 @@ export interface StudentUpdatePayload {
   major?: string;
   program?: string | null;
   specialization?: string | null;
-  family_income?: string | null;
-  financial_pressure?: string | null;
-  living_condition?: string | null;
   english_pass?: boolean | null;
-  english_eligibility_by_semester?: string | null;
-  ctxh_days_by_semester?: string | null;
+  ctxh_days?: number | null;
   user_id?: string | null;
 }
 
@@ -1393,6 +1561,73 @@ export interface EnrollmentUpdatePayload {
   semester_gpa_4?: number | null;
   final_gpa_4?: number | null;
   status?: string | null;
+}
+
+// ==========================================
+// Prediction & Explainable AI (XAI) Types
+// ==========================================
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
+export type ShapImpact = 'INCREASE_RISK' | 'DECREASE_RISK';
+
+export interface ShapFactorResponse {
+  feature: string;
+  shap_value: number;
+  impact: ShapImpact;
+  description: string;
+}
+
+export interface CoursePredictionResponse {
+  course_code: string;
+  course_name: string | null;
+  credits: number | null;
+  class_id: string | null;
+  class_group: string | null;
+  lecturer_name: string | null;
+  semester_code: string;
+  record_status: string | null;
+  fail_probability: number;
+  predicted_course_fail: number; // 0 (Pass) or 1 (Fail)
+  is_at_risk: boolean;
+  risk_level: RiskLevel;
+  predicted_score10: number;
+  predicted_gpa4: number;
+  current_marks: {
+    quiz?: number | null;
+    lab?: number | null;
+    btl?: number | null;
+    giua_ky?: number | null;
+    [key: string]: number | null | undefined;
+  };
+  top_shap_factors: ShapFactorResponse[];
+}
+
+export interface StudentPredictionResponse {
+  student_id: string;
+  semester_code: string;
+  total_courses: number;
+  at_risk_count: number;
+  predicted_semester_gpa4: number;
+  courses: CoursePredictionResponse[];
+}
+
+export interface PredictCourseRequest {
+  student_id: string;
+  course_code: string;
+  semester_code?: string | null;
+}
+
+export interface PredictStudentRequest {
+  student_id: string;
+  semester_code?: string | null;
+}
+
+export interface ModelHealthResponse {
+  status: string;
+  service: string;
+  model_status: 'loaded' | 'not_loaded' | string;
+  fail_threshold: number;
+  total_records_cached: number;
+  metrics: Record<string, any>;
 }
 ```
 

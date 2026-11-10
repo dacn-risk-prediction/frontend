@@ -22,6 +22,7 @@ import {
   Menu,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   User,
   X,
@@ -48,9 +49,14 @@ const NAV_ITEMS: NavItem[] = [
     icon: GraduationCap,
   },
   {
+    name: "AI Simulation",
+    href: "/student/simulation",
+    icon: Sparkles,
+  },
+  {
     name: "What-If Simulator",
     href: "/student/what-if",
-    icon: Sparkles,
+    icon: SlidersHorizontal,
   },
   {
     name: "Alerts",
