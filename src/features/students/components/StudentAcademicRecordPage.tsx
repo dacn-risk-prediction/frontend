@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useAuthUser } from "@/features/auth";
+import { useActiveSemester } from "@/hooks/use-active-semester";
 import {
   useStudentSummary,
   useStudentDetail,
@@ -101,6 +102,8 @@ interface SemesterGroup {
 export const StudentAcademicRecordPage = () => {
   const { data: user } = useAuthUser();
   const studentId = user?.user_code || user?.id;
+  const { data: activeSemester } = useActiveSemester();
+  const resolvedActiveSemester = activeSemester?.semester_code || "HK261";
 
   // Real API Queries
   const { data: summary } = useStudentSummary(studentId);
@@ -144,17 +147,6 @@ export const StudentAcademicRecordPage = () => {
 
     if (summary && summary.total_passed_credits >= DEGREE_TOTAL_CREDITS) {
       return true;
-    }
-
-    if (summary?.semester_gpas && summary.semester_gpas.length > 0) {
-      const lastTerm = summary.semester_gpas[summary.semester_gpas.length - 1];
-      if (
-        lastTerm.semester_code !== "HK261" &&
-        (summary.total_passed_credits >= 110 ||
-          Number(lastTerm.passed_credits ?? 0) > 0)
-      ) {
-        return true;
-      }
     }
 
     return false;
@@ -269,7 +261,6 @@ export const StudentAcademicRecordPage = () => {
     if (summary?.semester_gpas && summary.semester_gpas.length > 0) {
       summary.semester_gpas.forEach((s, idx, arr) => {
         const rawGpa = Number(s.semester_gpa ?? s.gpa ?? 0);
-        const cumGpa = Number(s.gpa ?? 0);
         const isInProgress =
           idx === arr.length - 1 &&
           rawGpa === 0 &&
@@ -277,7 +268,7 @@ export const StudentAcademicRecordPage = () => {
 
         summaryMap.set(s.semester_code, {
           semesterGpa: isInProgress ? null : rawGpa,
-          cumulativeGpa: isInProgress ? null : cumGpa,
+          cumulativeGpa: null,
           passedCredits: Number(s.passed_credits ?? 0),
           attemptedCredits: Number(s.attempted_credits ?? 0),
           coursesCount: Number(s.courses_count ?? 0),
@@ -291,10 +282,18 @@ export const StudentAcademicRecordPage = () => {
 
     // Group courses by semesterCode
     const coursesBySemester = new Map<string, SemesterCourseItem[]>();
+    const recordedCumGpaBySemester = new Map<string, number>();
 
     // 1. Historical enrollments (excluding exempted courses with final_score = 12)
     if (enrollments && enrollments.length > 0) {
       for (const e of enrollments) {
+        if (
+          e.final_gpa_4 !== null &&
+          e.final_gpa_4 !== undefined &&
+          !recordedCumGpaBySemester.has(e.semester_code)
+        ) {
+          recordedCumGpaBySemester.set(e.semester_code, Number(e.final_gpa_4));
+        }
         if (
           e.final_score !== null &&
           e.final_score !== undefined &&
@@ -305,9 +304,11 @@ export const StudentAcademicRecordPage = () => {
         semesterSet.add(e.semester_code);
         const catalogCourse = courseMap.get(e.course_code);
         const isPass =
-          e.passed === true || (e.gpa_4 !== null && e.gpa_4 >= 2.0);
+          e.passed === true ||
+          (e.passed !== false && e.gpa_4 !== null && e.gpa_4 >= 1.0);
         const isFailed =
-          e.passed === false || (e.gpa_4 !== null && e.gpa_4 < 2.0);
+          e.passed === false ||
+          (!isPass && e.gpa_4 !== null && e.gpa_4 < 1.0);
 
         const list = coursesBySemester.get(e.semester_code) || [];
         list.push({
@@ -334,7 +335,7 @@ export const StudentAcademicRecordPage = () => {
     // 2. Active current registered courses (excluding exempted courses with final_score = 12)
     if (currentCourses && currentCourses.length > 0) {
       const currentTermCode =
-        currentCourses[0]?.class_id?.split("_")[0] || "HK261";
+        currentCourses[0]?.class_id?.split("_")[0] || resolvedActiveSemester;
       const activeItems = currentCourses.filter(
         (item) =>
           !(item.class_id && exemptedClassIds.has(item.class_id)) &&
@@ -390,7 +391,39 @@ export const StudentAcademicRecordPage = () => {
       .sort((a, b) => parseSemesterRank(b) - parseSemesterRank(a));
 
     const activeTermCode =
-      currentCourses?.[0]?.class_id?.split("_")[0] || "HK261";
+      currentCourses?.[0]?.class_id?.split("_")[0] || resolvedActiveSemester;
+
+    // Compute running cumulative GPA chronologically (oldest -> newest) per semester
+    const runningCumGpaBySemester = new Map<string, number>();
+    const passedCourseBest = new Map<string, { gpa4: number; credits: number }>();
+    const sortedAsc = [...sortedCodes].reverse();
+    for (const code of sortedAsc) {
+      const termCourses = coursesBySemester.get(code) || [];
+      let hasGradedInTerm = false;
+      for (const c of termCourses) {
+        if (c.status === "completed" && c.gpa4 !== null && c.credits > 0) {
+          hasGradedInTerm = true;
+          const prev = passedCourseBest.get(c.courseCode);
+          if (!prev || c.gpa4 > prev.gpa4) {
+            passedCourseBest.set(c.courseCode, { gpa4: c.gpa4, credits: c.credits });
+          }
+        }
+      }
+      const recordedCum = recordedCumGpaBySemester.get(code);
+      if (recordedCum !== undefined) {
+        runningCumGpaBySemester.set(code, recordedCum);
+      } else if (hasGradedInTerm && passedCourseBest.size > 0) {
+        let totalPts = 0;
+        let totalCreds = 0;
+        passedCourseBest.forEach(({ gpa4, credits }) => {
+          totalPts += gpa4 * credits;
+          totalCreds += credits;
+        });
+        if (totalCreds > 0) {
+          runningCumGpaBySemester.set(code, Number((totalPts / totalCreds).toFixed(2)));
+        }
+      }
+    }
 
     return sortedCodes.map((code) => {
       const summaryInfo = summaryMap.get(code);
@@ -412,11 +445,15 @@ export const StudentAcademicRecordPage = () => {
         (code === activeTermCode ||
           courses.some((c) => c.status === "enrolled"));
 
+      const computedCumGpa = isInProgress
+        ? null
+        : (runningCumGpaBySemester.get(code) ?? summaryInfo?.cumulativeGpa ?? null);
+
       return {
         semesterCode: code,
         semesterName: formatSemesterName(code),
         semesterGpa: summaryInfo?.semesterGpa ?? null,
-        cumulativeGpa: summaryInfo?.cumulativeGpa ?? null,
+        cumulativeGpa: computedCumGpa,
         passedCredits: passed,
         attemptedCredits: attempted,
         coursesCount: count,
@@ -424,7 +461,7 @@ export const StudentAcademicRecordPage = () => {
         courses,
       };
     });
-  }, [summary, enrollments, currentCourses, allCourses]);
+  }, [summary, enrollments, currentCourses, allCourses, resolvedActiveSemester]);
 
   // List of distinct semester codes for dropdown filter
   const availableSemesters = useMemo(() => {

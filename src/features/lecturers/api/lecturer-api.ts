@@ -1,17 +1,24 @@
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import {
+  ACTIVE_SEMESTER_QUERY_KEY,
+  getActiveSemester,
+  useActiveSemester,
+} from "@/hooks/use-active-semester";
 import type {
   LecturerCurrentClassItem,
   LecturerDetail,
-  Semester,
   Enrollment,
 } from "@/types";
 
+export {
+  ACTIVE_SEMESTER_QUERY_KEY,
+  getActiveSemester,
+  useActiveSemester,
+};
+
 export const LECTURER_CURRENT_CLASSES_QUERY_KEY = (lecturerId?: string) =>
   ["lecturers", lecturerId, "current-classes"] as const;
-
-export const ACTIVE_SEMESTER_QUERY_KEY = () =>
-  ["semesters", "active"] as const;
 
 export const LECTURER_DETAIL_QUERY_KEY = (lecturerId?: string) =>
   ["lecturers", lecturerId, "detail"] as const;
@@ -39,27 +46,6 @@ export const getLecturerCurrentClasses = async (
       (error as { response?: { status?: number } }).response?.status === 404
     ) {
       return [];
-    }
-    throw error;
-  }
-};
-
-/**
- * Fetch active semester configuration
- * GET /api/v1/semesters/active
- */
-export const getActiveSemester = async (): Promise<Semester | null> => {
-  try {
-    const response = await apiClient.get<Semester>("/semesters/active");
-    return response.data;
-  } catch (error: unknown) {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "response" in error &&
-      (error as { response?: { status?: number } }).response?.status === 404
-    ) {
-      return null;
     }
     throw error;
   }
@@ -99,7 +85,10 @@ export const getClassEnrollments = async (
 ): Promise<Enrollment[]> => {
   try {
     const response = await apiClient.get<Enrollment[]>(
-      `/enrollments/classes/${classId}`
+      `/enrollments/classes/${classId}`,
+      {
+        params: { limit: 500 },
+      }
     );
     return response.data ?? [];
   } catch (error: unknown) {
@@ -125,14 +114,6 @@ export const useLecturerCurrentClasses = (lecturerId?: string) => {
     queryFn: () => getLecturerCurrentClasses(lecturerId!),
     enabled: Boolean(lecturerId),
     staleTime: 5 * 60 * 1000,
-  });
-};
-
-export const useActiveSemester = () => {
-  return useQuery({
-    queryKey: ACTIVE_SEMESTER_QUERY_KEY(),
-    queryFn: () => getActiveSemester(),
-    staleTime: 30 * 60 * 1000,
   });
 };
 

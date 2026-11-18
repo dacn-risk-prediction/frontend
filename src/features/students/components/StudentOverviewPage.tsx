@@ -9,7 +9,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthUser } from "@/features/auth";
+import { useActiveSemester, formatSemesterLabel } from "@/hooks/use-active-semester";
 import {
   ArrowRight,
   Award,
@@ -39,9 +41,13 @@ export const StudentOverviewPage = () => {
 
   // Primary student ID from user profile
   const studentId = user?.user_code || user?.id;
+  const { data: activeSemester } = useActiveSemester();
+  const resolvedActiveSemester = activeSemester?.semester_code || "HK261";
+  const activeSemesterLabel = formatSemesterLabel(resolvedActiveSemester);
 
   // Fetch real Academic Summary & Semester GPA History
-  const { data: summary } = useStudentSummary(studentId);
+  const { data: summary, isLoading: isLoadingSummary } =
+    useStudentSummary(studentId);
 
   // Fetch real current registered courses (GET /students/{id}/current)
   const { data: currentCourses, isLoading: isLoadingCourses } =
@@ -101,7 +107,7 @@ export const StudentOverviewPage = () => {
     Number(summary?.failed_courses_count ?? 0) === 0;
 
   // 2. Real Cumulative GPA & Delta computation
-  const cumulativeGpa = summary?.cumulative_gpa ?? 3.2;
+  const cumulativeGpa = summary?.cumulative_gpa ?? 0;
 
   // Compute GPA change from the last two COMPLETED semesters (ignoring active in-progress terms with 0.0)
   const gpaDelta = useMemo(() => {
@@ -130,7 +136,7 @@ export const StudentOverviewPage = () => {
         return Number((last - prev).toFixed(2));
       }
     }
-    return 0.1; // Default baseline
+    return 0;
   }, [summary]);
 
   // 3. Real Credits Passed & Progress Computation (includes exempted credits with final_score = 12)
@@ -156,7 +162,7 @@ export const StudentOverviewPage = () => {
   }, [enrollments, currentCourses]);
 
   const passedCredits =
-    (summary?.total_passed_credits ?? 112) + uncountedExemptedCredits;
+    (summary?.total_passed_credits ?? 0) + uncountedExemptedCredits;
   const creditsPercentage = Math.min(
     100,
     Math.round((passedCredits / DEGREE_TOTAL_CREDITS) * 100),
@@ -181,18 +187,6 @@ export const StudentOverviewPage = () => {
 
     if (summary && summary.total_passed_credits >= DEGREE_TOTAL_CREDITS) {
       return true;
-    }
-
-    // Historical student: finished past terms and not currently enrolled in active term HK261
-    if (summary?.semester_gpas && summary.semester_gpas.length > 0) {
-      const lastTerm = summary.semester_gpas[summary.semester_gpas.length - 1];
-      if (
-        lastTerm.semester_code !== "HK261" &&
-        (summary.total_passed_credits >= 110 ||
-          Number(lastTerm.passed_credits ?? 0) > 0)
-      ) {
-        return true;
-      }
     }
 
     return false;
@@ -223,7 +217,7 @@ export const StudentOverviewPage = () => {
       const termCode =
         activeCurrentCourses[0]?.class_id?.split("_")[0] ||
         currentCourses[0]?.class_id?.split("_")[0] ||
-        "HK261";
+        resolvedActiveSemester;
       return {
         termCode,
         credits,
@@ -241,11 +235,11 @@ export const StudentOverviewPage = () => {
     }
 
     return {
-      termCode: "HK261",
+      termCode: resolvedActiveSemester,
       credits: 0,
       classesCount: 0,
     };
-  }, [currentCourses, activeCurrentCourses, summary]);
+  }, [currentCourses, activeCurrentCourses, summary, resolvedActiveSemester]);
 
   // 5. Dynamic GPA Trend Line Chart mapping real semester_gpas
   const displaySemesters = useMemo(() => {
@@ -265,14 +259,7 @@ export const StudentOverviewPage = () => {
         };
       });
     }
-    // Fallback semesters if not loaded or empty
-    return [
-      { code: "HK241", gpa: 2.9, isInProgress: false },
-      { code: "HK242", gpa: 3.05, isInProgress: false },
-      { code: "HK251", gpa: 3.1, isInProgress: false },
-      { code: "HK252", gpa: 3.12, isInProgress: false },
-      { code: "HK261", gpa: 3.2, isInProgress: true },
-    ];
+    return [];
   }, [summary]);
 
   // Chart layout configuration:
@@ -373,7 +360,7 @@ export const StudentOverviewPage = () => {
             className="border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-2xs"
           >
             <span className="mr-1.5 h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            Semester 261 • Active Term
+            {activeSemesterLabel} • Active Term
           </Badge>
         </div>
       </div>
@@ -388,7 +375,9 @@ export const StudentOverviewPage = () => {
                 Cumulative GPA
               </p>
               <div className="mt-2 flex items-baseline gap-1">
-                {isFirstTermOnly ? (
+                {isLoadingSummary ? (
+                  <Skeleton className="h-9 w-24 bg-slate-800" />
+                ) : isFirstTermOnly ? (
                   <div className="flex items-baseline gap-2">
                     <span className="text-3xl font-extrabold tracking-tight text-white">
                       Pending
@@ -446,12 +435,18 @@ export const StudentOverviewPage = () => {
                 Credits Completed
               </p>
               <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold tracking-tight text-white">
-                  {passedCredits}
-                </span>
-                <span className="text-base font-semibold text-slate-400">
-                  / {DEGREE_TOTAL_CREDITS}
-                </span>
+                {isLoadingSummary ? (
+                  <Skeleton className="h-9 w-24 bg-slate-800" />
+                ) : (
+                  <>
+                    <span className="text-3xl font-extrabold tracking-tight text-white">
+                      {passedCredits}
+                    </span>
+                    <span className="text-base font-semibold text-slate-400">
+                      / {DEGREE_TOTAL_CREDITS}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-800/80 text-blue-400 ring-1 ring-slate-700/50">
@@ -579,7 +574,20 @@ export const StudentOverviewPage = () => {
           </CardHeader>
 
           <CardContent className="pt-4">
-            <div className="relative w-full overflow-hidden">
+            {isLoadingSummary ? (
+              <Skeleton className="h-56 w-full rounded-lg bg-slate-100" />
+            ) : chartPoints.length === 0 ? (
+              <div className="flex h-56 flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 text-center">
+                <BookOpen className="mb-2 h-8 w-8 text-slate-300" />
+                <p className="text-sm font-semibold text-slate-700">
+                  No semester GPA history yet
+                </p>
+                <p className="mt-1 max-w-sm text-xs text-slate-500">
+                  Your historical semester trend chart will appear once term grades are recorded.
+                </p>
+              </div>
+            ) : (
+              <div className="relative w-full overflow-hidden">
               {/* Dynamic SVG Curve Line Chart */}
               <svg
                 viewBox="0 0 650 230"
@@ -833,7 +841,8 @@ export const StudentOverviewPage = () => {
                   );
                 })}
               </svg>
-            </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -872,7 +881,7 @@ export const StudentOverviewPage = () => {
               </div>
             </div>
             <CardDescription className="text-xs text-slate-500">
-              Semester 261 • Active Enrollment
+              {activeSemesterLabel} • Active Enrollment
             </CardDescription>
           </CardHeader>
 
