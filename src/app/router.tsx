@@ -8,7 +8,7 @@ import {
   StudentAcademicRecordPage,
   StudentWhatIfPage,
   StudentSimulationPage,
-  StudentAlertsPage,
+  StudentAdvisingPage,
   StudentSettingsPage,
 } from "@/features/students"
 import {
@@ -115,8 +115,12 @@ const appRouter = createBrowserRouter([
             element: <StudentSimulationPage />,
           },
           {
+            path: "advising",
+            element: <StudentAdvisingPage />,
+          },
+          {
             path: "alerts",
-            element: <StudentAlertsPage />,
+            element: <Navigate to="/student/advising" replace />,
           },
           {
             path: "settings",

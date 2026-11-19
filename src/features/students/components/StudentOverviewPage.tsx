@@ -15,7 +15,6 @@ import { useActiveSemester, formatSemesterLabel } from "@/hooks/use-active-semes
 import {
   ArrowRight,
   Award,
-  Bell,
   BookOpen,
   GraduationCap,
   Minus,
@@ -23,6 +22,7 @@ import {
   TrendingDown,
   TrendingUp,
   User,
+  UserCheck,
 } from "lucide-react";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -189,6 +189,18 @@ export const StudentOverviewPage = () => {
       return true;
     }
 
+    // Historical student: finished past terms and not currently enrolled in active term HK261
+    if (summary?.semester_gpas && summary.semester_gpas.length > 0) {
+      const lastTerm = summary.semester_gpas[summary.semester_gpas.length - 1];
+      if (
+        lastTerm.semester_code !== "HK261" &&
+        (summary.total_passed_credits >= 110 ||
+          Number(lastTerm.passed_credits ?? 0) > 0)
+      ) {
+        return true;
+      }
+    }
+
     return false;
   }, [user?.title, summary]);
 
@@ -348,11 +360,11 @@ export const StudentOverviewPage = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate("/student/alerts")}
+            onClick={() => navigate("/student/advising")}
             className="h-8 cursor-pointer gap-1.5 border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-blue-700"
           >
-            <Bell className="h-3.5 w-3.5 text-blue-600" />
-            <span>Academic Alerts</span>
+            <UserCheck className="h-3.5 w-3.5 text-blue-600" />
+            <span>Cố vấn Học vụ</span>
             <ArrowRight className="h-3 w-3 text-slate-400" />
           </Button>
           <Badge
@@ -580,20 +592,20 @@ export const StudentOverviewPage = () => {
               <div className="flex h-56 flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 text-center">
                 <BookOpen className="mb-2 h-8 w-8 text-slate-300" />
                 <p className="text-sm font-semibold text-slate-700">
-                  No semester GPA history yet
+                  Chưa có lịch sử điểm học kỳ
                 </p>
                 <p className="mt-1 max-w-sm text-xs text-slate-500">
-                  Your historical semester trend chart will appear once term grades are recorded.
+                  Biểu đồ xu hướng GPA sẽ tự động xuất hiện khi các học kỳ được ghi nhận điểm.
                 </p>
               </div>
             ) : (
               <div className="relative w-full overflow-hidden">
-              {/* Dynamic SVG Curve Line Chart */}
-              <svg
-                viewBox="0 0 650 230"
-                className="w-full overflow-visible"
-                preserveAspectRatio="none"
-              >
+                {/* Dynamic SVG Curve Line Chart */}
+                <svg
+                  viewBox="0 0 650 230"
+                  className="w-full overflow-visible"
+                  preserveAspectRatio="none"
+                >
                 <defs>
                   {/* Subtle Area Gradient under line */}
                   <linearGradient
@@ -841,8 +853,8 @@ export const StudentOverviewPage = () => {
                   );
                 })}
               </svg>
-              </div>
-            )}
+            </div>
+          )}
           </CardContent>
         </Card>
 
@@ -858,10 +870,10 @@ export const StudentOverviewPage = () => {
                   variant="outline"
                   size="sm"
                   className="h-7 cursor-pointer gap-1.5 border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-blue-700"
-                  onClick={() => navigate("/student/alerts")}
+                  onClick={() => navigate("/student/advising")}
                 >
-                  <Bell className="h-3.5 w-3.5 text-blue-600" />
-                  <span>Alerts</span>
+                  <UserCheck className="h-3.5 w-3.5 text-blue-600" />
+                  <span>Cố vấn Học vụ</span>
                   <ArrowRight className="h-3 w-3 text-slate-400" />
                 </Button>
                 <Badge

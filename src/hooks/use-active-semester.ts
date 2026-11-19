@@ -37,7 +37,6 @@ export const useActiveSemester = () => {
 export function formatSemesterLabel(semesterCode?: string | null): string {
   if (!semesterCode) return "Active Semester";
   return semesterCode.startsWith("HK")
-    ? `Semester ${semesterCode.slice(2)}`
+    ? `Học kỳ ${semesterCode.slice(2)}`
     : semesterCode;
 }
-

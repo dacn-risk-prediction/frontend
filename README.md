@@ -44,12 +44,9 @@ Frontend Single Page Application (SPA) for the **Academic Risk Prediction & Expl
 - **What-If Academic Simulator (`/student/what-if`)**:
   - Interactive score adjustment sliders to project instant GPA changes and risk counterfactuals.
   - Pre-selected course targeted simulation loaded via query parameters.
-- **Academic Alerts & Notifications (`/student/alerts`)**:
-  - Dynamic derived alerts based on live academic data:
-    - **Academic Risk**: Critical Cumulative GPA drops below satisfactory thresholds (2.0/4.0), prerequisite course failures needing re-enrollment.
-    - **Enrollment**: Active course retakes and credit registration status in the current semester.
-    - **Degree Milestones**: Official graduation conferral and senior audit milestones.
-  - Category filters (`ALL`, `RISK`, `ENROLLMENT`, `DEGREE`) and unread status tracking.
+- **Academic Advising Hub (`/student/advising`)**:
+  - Centralized academic advising directory connecting students with faculty advisors and course instructors.
+  - Guidance feeds, office hours booking, quick academic support requests, and action plan tracking.
 - **Student Profile & Settings (`/student/settings`)**:
   - Cohort, major, degree program, and institutional account information.
 
@@ -65,7 +62,7 @@ Frontend Single Page Application (SPA) for the **Academic Risk Prediction & Expl
 | `/student/overview` | `student` | `StudentOverviewPage` | Student dashboard, GPA trend chart, active courses, degree progress |
 | `/student/record` | `student` | `StudentAcademicRecordPage` | Official chronological semester transcript (newest to oldest) |
 | `/student/what-if` | `student` | `StudentWhatIfPage` | What-If XAI grade simulator & counterfactual recovery planner |
-| `/student/alerts` | `student` | `StudentAlertsPage` | Academic alerts, prerequisite reminders, and registration notices |
+| `/student/advising` | `student` | `StudentAdvisingPage` | Academic advising hub, instructor directory, office hours booking, and action plans |
 | `/student/settings` | `student` | `StudentSettingsPage` | Student profile and institutional program settings |
 | `/lecturer/*` | `lecturer`, `admin` | `ProtectedRoute` | Lecturer class rosters and student risk evaluation |
 | `/admin/*` | `admin` | `ProtectedRoute` | System administration and user management |
@@ -113,7 +110,7 @@ frontend/
 │   │   │   └── types/       # AuthUser, LoginCredentials, TokenResponse
 │   │   └── students/        # Student portal domain
 │   │       ├── api/         # student-api.ts (TanStack Query hooks)
-│   │       └── components/  # StudentOverviewPage, StudentAcademicRecordPage, StudentWhatIfPage, StudentAlertsPage, StudentSettingsPage
+│   │       └── components/  # StudentOverviewPage, StudentAcademicRecordPage, StudentWhatIfPage, StudentAdvisingPage, StudentSettingsPage
 │   ├── lib/                 # Core network and utility layers
 │   │   ├── api-client.ts    # Axios client with Bearer injection & silent token refresh
 │   │   └── utils.ts         # cn() utility helper (clsx + tailwind-merge)
