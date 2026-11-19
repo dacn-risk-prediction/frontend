@@ -17,6 +17,7 @@ import {
   Bell,
   BookOpen,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   LayoutDashboard,
   LogOut,
@@ -25,10 +26,12 @@ import {
   ShieldCheck,
   Sparkles,
   User,
+  UserCheck,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useUnreadAdvisingCount } from "@/features/advising/api/advising-api";
 import {
   useActiveSemester,
   useLecturerCurrentClasses,
@@ -48,6 +51,41 @@ export const LecturerLayout = () => {
   const { data: user } = useAuthUser();
   const logout = useLogout();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("aurora_lecturer_sidebar_collapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebar = () => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      setMobileMenuOpen((prev) => !prev);
+    } else {
+      setSidebarCollapsed((prev) => {
+        const next = !prev;
+        try {
+          localStorage.setItem("aurora_lecturer_sidebar_collapsed", String(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+    }
+  };
+
+  const handleCloseSidebar = () => {
+    setMobileMenuOpen(false);
+    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+      setSidebarCollapsed(true);
+      try {
+        localStorage.setItem("aurora_lecturer_sidebar_collapsed", "true");
+      } catch {
+        // ignore
+      }
+    }
+  };
 
   const lecturerId = user?.user_code || user?.id;
   const { data: currentClasses } = useLecturerCurrentClasses(lecturerId);
@@ -65,7 +103,10 @@ export const LecturerLayout = () => {
       : activeSemester.semester_code
     : "Semester 261";
 
-  const navItems: NavItem[] = [
+  const { data: unreadData } = useUnreadAdvisingCount(!!user);
+  const unreadCount = unreadData?.unread_count ?? 0;
+
+  const navItems = useMemo<NavItem[]>(() => [
     {
       name: "Lecturer Dashboard",
       href: "/lecturer/dashboard",
@@ -81,16 +122,17 @@ export const LecturerLayout = () => {
           : undefined,
     },
     {
-      name: "Intervention & Alerts",
+      name: "Cố vấn & Can thiệp",
       href: "/lecturer/alerts",
-      icon: AlertTriangle,
+      icon: UserCheck,
+      badge: unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined,
     },
     {
       name: "Settings",
       href: "/lecturer/settings",
       icon: Settings,
     },
-  ];
+  ], [currentClasses, unreadCount]);
 
   // Get current active navigation label for breadcrumb
   const currentNav = navItems.find(
@@ -118,47 +160,67 @@ export const LecturerLayout = () => {
         />
       )}
 
-      {/* Left Sidebar (Fixed on desktop, non-sliding on scroll) */}
+      {/* Left Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-slate-200 bg-white transition-transform duration-200 ease-in-out lg:translate-x-0",
-          mobileMenuOpen ? "translate-x-0" : "-translate-x-full",
+          "fixed inset-y-0 left-0 z-50 flex flex-col border-r border-slate-200 bg-white transition-all duration-200 ease-in-out",
+          mobileMenuOpen ? "translate-x-0 w-64 shadow-xl" : "-translate-x-full",
+          "lg:translate-x-0",
+          sidebarCollapsed ? "lg:w-20" : "lg:w-64",
         )}
       >
         {/* Brand Header */}
-        <div className="flex h-16 items-center justify-between border-b border-slate-100 px-6">
+        <div
+          className={cn(
+            "flex h-16 items-center border-b border-slate-100 transition-all duration-200",
+            sidebarCollapsed ? "justify-center px-2" : "justify-between px-6",
+          )}
+        >
           <Link
             to="/lecturer/dashboard"
-            className="group flex flex-col focus:outline-hidden"
+            className="group flex items-center gap-2.5 focus:outline-hidden"
             onClick={() => setMobileMenuOpen(false)}
+            title="Aurora Faculty Portal"
           >
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-700 text-white shadow-xs">
-                <Sparkles className="h-4 w-4 transition-transform group-hover:scale-110" />
-              </div>
-              <span className="font-heading text-lg font-black tracking-wider text-slate-900">
-                AURORA
-              </span>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-700 text-white shadow-xs transition-transform group-hover:scale-105">
+              <Sparkles className="h-5 w-5" />
             </div>
-            <span className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">
-              Faculty & Lecturer Portal
-            </span>
+            {!sidebarCollapsed && (
+              <div className="flex flex-col min-w-0 overflow-hidden">
+                <span className="font-heading text-lg font-black tracking-wider text-slate-900 leading-none">
+                  AURORA
+                </span>
+                <span className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mt-0.5 truncate">
+                  Faculty & Lecturer Portal
+                </span>
+              </div>
+            )}
           </Link>
 
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="lg:hidden text-slate-500 hover:text-slate-900"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            <X className="h-5 w-5" />
-          </Button>
+          {!sidebarCollapsed && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-slate-400 hover:text-slate-900 cursor-pointer shrink-0"
+              onClick={handleCloseSidebar}
+              title="Thu gọn thanh điều hướng"
+              aria-label="Thu gọn thanh điều hướng"
+            >
+              <ChevronLeft className="h-5 w-5 hidden lg:block" />
+              <X className="h-5 w-5 lg:hidden" />
+            </Button>
+          )}
         </div>
 
         {/* Navigation Items */}
-        <nav className="flex-1 space-y-1.5 p-4 overflow-y-auto">
-          <div className="px-3 pb-2 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-            Faculty Management
+        <nav className="flex-1 space-y-1.5 p-3 overflow-y-auto overflow-x-hidden">
+          <div
+            className={cn(
+              "text-[10px] font-bold tracking-wider text-slate-400 uppercase transition-all select-none",
+              sidebarCollapsed ? "text-center pb-2 pt-1" : "px-3 pb-2 pt-1",
+            )}
+          >
+            {sidebarCollapsed ? "FACULTY" : "Faculty Management"}
           </div>
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -172,26 +234,35 @@ export const LecturerLayout = () => {
                 key={item.href}
                 to={item.href}
                 onClick={() => setMobileMenuOpen(false)}
+                title={sidebarCollapsed ? item.name : undefined}
                 className={cn(
-                  "group relative flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors",
+                  "group relative flex items-center rounded-xl text-sm font-medium transition-all duration-150",
+                  sidebarCollapsed
+                    ? "h-11 w-11 mx-auto justify-center"
+                    : "px-3.5 py-2.5 justify-between",
                   isActive
-                    ? "bg-blue-50 text-blue-700 font-semibold shadow-xs"
+                    ? "bg-blue-50 text-blue-700 font-semibold shadow-2xs"
                     : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900",
                 )}
               >
-                <div className="flex items-center gap-3">
+                <div
+                  className={cn(
+                    "flex items-center",
+                    sidebarCollapsed ? "justify-center" : "gap-3",
+                  )}
+                >
                   <Icon
                     className={cn(
-                      "h-4 w-4 transition-colors",
+                      "h-5 w-5 shrink-0 transition-colors",
                       isActive
                         ? "text-blue-700"
-                        : "text-slate-400 group-hover:text-slate-700",
+                        : "text-slate-500 group-hover:text-slate-800",
                     )}
                   />
-                  <span>{item.name}</span>
+                  {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
                 </div>
 
-                {item.badge !== undefined && (
+                {!sidebarCollapsed && item.badge !== undefined && (
                   <Badge
                     variant="destructive"
                     className="h-5 min-w-5 px-1.5 font-mono text-[11px] font-bold"
@@ -200,8 +271,14 @@ export const LecturerLayout = () => {
                   </Badge>
                 )}
 
+                {/* Active Indicator Bar on Left Border */}
                 {isActive && (
-                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-blue-700" />
+                  <span
+                    className={cn(
+                      "absolute left-0 w-1 rounded-r-md bg-blue-700",
+                      "top-2 bottom-2",
+                    )}
+                  />
                 )}
               </Link>
             );
@@ -209,35 +286,62 @@ export const LecturerLayout = () => {
         </nav>
 
         {/* Sidebar Footer Info */}
-        <div className="border-t border-slate-100 p-4">
-          <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3 border border-slate-200/60">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
-              <ShieldCheck className="h-5 w-5" />
+        <div
+          className={cn(
+            "border-t border-slate-100 transition-all",
+            sidebarCollapsed ? "p-2.5 flex justify-center" : "p-4",
+          )}
+        >
+          <div
+            className={cn(
+              "flex items-center rounded-xl bg-slate-50 border border-slate-200/60 transition-all",
+              sidebarCollapsed
+                ? "h-11 w-11 justify-center"
+                : "gap-3 p-3 w-full",
+            )}
+            title={
+              sidebarCollapsed
+                ? `${semesterDisplay} • ${activeSemester?.academic_year ? `AY ${activeSemester.academic_year}` : "HCMUT Faculty"}`
+                : undefined
+            }
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
+              <ShieldCheck className="h-4.5 w-4.5" />
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-slate-800">
-                {semesterDisplay}
-              </p>
-              <p className="truncate text-[11px] text-slate-500">
-                {activeSemester?.academic_year
-                  ? `AY ${activeSemester.academic_year}`
-                  : "HCMUT Faculty"}
-              </p>
-            </div>
+            {!sidebarCollapsed && (
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <p className="truncate text-xs font-semibold text-slate-800">
+                  {semesterDisplay}
+                </p>
+                <p className="truncate text-[11px] text-slate-500">
+                  {activeSemester?.academic_year
+                    ? `AY ${activeSemester.academic_year}`
+                    : "HCMUT Faculty"}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </aside>
 
-      {/* Main Wrapper (Offset on desktop by sidebar width) */}
-      <div className="flex flex-1 flex-col min-w-0 lg:pl-64">
+      {/* Main Wrapper (Offset on desktop by sidebar width: lg:pl-20 when collapsed, lg:pl-64 when open) */}
+      <div
+        className={cn(
+          "flex flex-1 flex-col min-w-0 transition-all duration-200 ease-in-out",
+          sidebarCollapsed ? "lg:pl-20" : "lg:pl-64",
+        )}
+      >
         {/* Top Header */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur-md sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
+            {/* Toggle / Ẩn hiện tab bar button */}
             <Button
               variant="ghost"
               size="icon-sm"
-              className="lg:hidden text-slate-600 hover:text-slate-900"
-              onClick={() => setMobileMenuOpen(true)}
+              className="text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer"
+              onClick={toggleSidebar}
+              aria-label="Toggle tab bar"
+              title={sidebarCollapsed ? "Hiện thanh tab bar điều hướng" : "Ẩn thanh tab bar điều hướng"}
             >
               <Menu className="h-5 w-5" />
             </Button>
@@ -263,7 +367,13 @@ export const LecturerLayout = () => {
               aria-label="View intervention alerts"
             >
               <Bell className="h-5 w-5" />
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white" />
+              {unreadCount > 0 ? (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white ring-2 ring-white animate-pulse">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              ) : (
+                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white" />
+              )}
             </Button>
 
             <div className="h-5 w-px bg-slate-200" />

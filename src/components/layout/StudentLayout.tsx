@@ -30,8 +30,9 @@ import {
   UserCheck,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useUnreadAdvisingCount } from "@/features/advising/api/advising-api";
 
 interface NavItem {
   name: string;
@@ -80,6 +81,20 @@ export const StudentLayout = () => {
   const { data: activeSemester } = useActiveSemester();
   const logout = useLogout();
   const activeSemesterLabel = formatSemesterLabel(activeSemester?.semester_code);
+  const { data: unreadData } = useUnreadAdvisingCount(!!user);
+  const unreadCount = unreadData?.unread_count ?? 0;
+
+  const navItems = useMemo<NavItem[]>(() => {
+    return NAV_ITEMS.map((item) => {
+      if (item.href === "/student/advising") {
+        return {
+          ...item,
+          badge: unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined,
+        };
+      }
+      return item;
+    });
+  }, [unreadCount]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
@@ -209,7 +224,7 @@ export const StudentLayout = () => {
             {sidebarCollapsed ? "MAIN" : "Main Portal"}
           </div>
 
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const Icon = item.icon;
             const isActive =
               location.pathname === item.href ||
@@ -340,7 +355,7 @@ export const StudentLayout = () => {
 
           {/* Right Header Actions */}
           <div className="flex items-center gap-4">
-            {/* Notification Bell with Blue Indicator Dot */}
+            {/* Notification Bell with Dynamic Unread Badge */}
             <Button
               variant="ghost"
               size="icon-sm"
@@ -349,7 +364,13 @@ export const StudentLayout = () => {
               aria-label="View notifications"
             >
               <Bell className="h-5 w-5" />
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-blue-600 ring-2 ring-white" />
+              {unreadCount > 0 ? (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white ring-2 ring-white animate-pulse">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              ) : (
+                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-blue-600 ring-2 ring-white" />
+              )}
             </Button>
 
             <div className="h-5 w-px bg-slate-200" />

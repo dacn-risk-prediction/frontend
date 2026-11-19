@@ -48,6 +48,16 @@ import {
   useStudentPredictions,
   useStudentSummary,
 } from "../api/student-api";
+import {
+  useAdvisingSessions,
+  useCreateOrGetAdvisingSession,
+  useSessionMessages,
+  useSendMessage,
+  useSessionAppointments,
+  useCreateAppointment,
+  useSessionTasks,
+  useToggleTask,
+} from "@/features/advising/api/advising-api";
 
 // ==========================================
 // Types & Data Contracts
@@ -476,7 +486,37 @@ export const StudentAdvisingPage = () => {
     };
   }, []);
 
-  // Persisted chat messages state
+  // ==========================================
+  // Backend Advising Sessions & Queries
+  // ==========================================
+  const { data: serverSessions } = useAdvisingSessions();
+  const createOrGetSessionMutation = useCreateOrGetAdvisingSession();
+
+  const activeSession = useMemo(() => {
+    if (!serverSessions || serverSessions.length === 0) return null;
+    const targetCourse = selectedAdvisor.courseCode || "CO2007";
+    return (
+      serverSessions.find((s) => s.course_code === targetCourse) ||
+      serverSessions[0] ||
+      null
+    );
+  }, [serverSessions, selectedAdvisor.courseCode]);
+
+  const activeSessionId = activeSession?.id;
+
+  // Real-time Messages from Backend
+  const { data: serverMessages } = useSessionMessages(activeSessionId);
+  const sendMessageMutation = useSendMessage(activeSessionId);
+
+  // Real-time Appointments from Backend
+  const { data: serverAppointments } = useSessionAppointments(activeSessionId);
+  const createAppointmentMutation = useCreateAppointment(activeSessionId);
+
+  // Real-time Tasks from Backend
+  const { data: serverTasks } = useSessionTasks(activeSessionId);
+  const toggleTaskMutation = useToggleTask(activeSessionId);
+
+  // Persisted chat messages state (fallback)
   const messageStorageKey = `aurora_advising_messages_${studentId}`;
   const [messages, setMessages] = useState<DirectMessage[]>(() => {
     try {
@@ -519,7 +559,7 @@ export const StudentAdvisingPage = () => {
   const [chatInput, setChatInput] = useState("");
 
   // Send a custom message
-  const handleSendMessage = (textToSend?: string, isQuick: boolean = false) => {
+  const handleSendMessage = async (textToSend?: string, isQuick: boolean = false) => {
     const content = (textToSend || chatInput).trim();
     if (!content) return;
 
@@ -536,24 +576,37 @@ export const StudentAdvisingPage = () => {
     setMessages((prev) => [...prev, newMsg]);
     if (!textToSend) setChatInput("");
 
-    toast.success("Đã gửi yêu cầu tới Thầy/Cô thành công!");
+    // Send to Backend
+    try {
+      let targetSessionId = activeSessionId;
+      if (!targetSessionId) {
+        const created = await createOrGetSessionMutation.mutateAsync({
+          student_id: studentId,
+          course_code: selectedAdvisor.courseCode || "CO2007",
+          topic: `Cố vấn học vụ môn ${selectedAdvisor.courseCode || "Chuyên ngành"}`,
+          risk_level:
+            selectedAdvisor.riskLevel === "HIGH"
+              ? "CRITICAL"
+              : selectedAdvisor.riskLevel === "MEDIUM"
+                ? "WARNING"
+                : "SAFE",
+          lecturer_id: selectedAdvisor.id.startsWith("course-")
+            ? undefined
+            : "GV00001",
+        });
+        targetSessionId = created.id;
+      }
+      if (targetSessionId) {
+        await sendMessageMutation.mutateAsync({
+          content,
+          message_type: "REPLY",
+        });
+      }
+    } catch {
+      // Fallback: message is already kept locally
+    }
 
-    // Simulated Advisor Auto-Reply after 1.2s
-    setTimeout(() => {
-      const autoReplyText = selectedAdvisor.isFacultyAdvisor
-        ? `Thầy đã nhận được thông tin từ em. Thầy sẽ xem xét kỹ hồ sơ học vụ và phản hồi chi tiết cho em qua email trường (${selectedAdvisor.email}) hoặc hẹn gặp em tại P.304 H6.`
-        : `Thầy đã nhận được yêu cầu của em về môn ${selectedAdvisor.courseCode ?? "học"}. Em kiểm tra kỹ thêm tài liệu trên LMS và có thể đến phòng làm việc của Thầy vào giờ tiếp sinh viên tuần này nhé.`;
-
-      const replyMsg: DirectMessage = {
-        id: `reply-${Date.now()}`,
-        advisorId: selectedAdvisor.id,
-        sender: "advisor",
-        senderName: selectedAdvisor.name,
-        content: autoReplyText,
-        timestamp: "Vừa xong",
-      };
-      setMessages((prev) => [...prev, replyMsg]);
-    }, 1200);
+    toast.success("Đã gửi tin nhắn tới Thầy/Cô thành công!");
   };
 
   // Quick Request Triggers
@@ -578,8 +631,24 @@ export const StudentAdvisingPage = () => {
 
   // Messages for currently selected advisor
   const currentAdvisorMessages = useMemo(() => {
+    if (serverMessages && serverMessages.length > 0) {
+      return serverMessages.map((m) => ({
+        id: m.id,
+        advisorId: selectedAdvisor.id,
+        sender: (m.sender_role.toLowerCase() === "student"
+          ? "student"
+          : "advisor") as "student" | "advisor",
+        senderName: m.sender_name,
+        content: m.content,
+        timestamp: new Date(m.created_at).toLocaleTimeString("vi-VN", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        isQuickRequest: false,
+      }));
+    }
     return messages.filter((m) => m.advisorId === selectedAdvisor.id);
-  }, [messages, selectedAdvisor.id]);
+  }, [serverMessages, messages, selectedAdvisor.id]);
 
   // Guidance feeds for currently selected advisor
   const currentAdvisorFeeds = useMemo(() => {
@@ -642,7 +711,7 @@ export const StudentAdvisingPage = () => {
   const [meetingType, setMeetingType] = useState<"OFFICE" | "ONLINE">("OFFICE");
   const [bookingNotes, setBookingNotes] = useState("");
 
-  const handleCreateBooking = (e: React.FormEvent) => {
+  const handleCreateBooking = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const newBooking: BookingAppointment = {
@@ -664,10 +733,56 @@ export const StudentAdvisingPage = () => {
     setAppointments((prev) => [newBooking, ...prev]);
     setBookingNotes("");
     setCustomSlot(null);
+
+    // Call Backend
+    try {
+      let targetSessionId = activeSessionId;
+      if (!targetSessionId) {
+        const created = await createOrGetSessionMutation.mutateAsync({
+          student_id: studentId,
+          course_code: selectedAdvisor.courseCode || "CO2007",
+          topic: `Cố vấn học vụ môn ${selectedAdvisor.courseCode || "Chuyên ngành"}`,
+        });
+        targetSessionId = created.id;
+      }
+      if (targetSessionId) {
+        await createAppointmentMutation.mutateAsync({
+          subject: selectedReason,
+          time_slot: selectedSlot,
+          meeting_type: meetingType,
+          location:
+            meetingType === "OFFICE"
+              ? selectedAdvisor.office
+              : "Google Meet (Sẽ gửi link qua email sinh viên)",
+          notes: bookingNotes.trim() || null,
+        });
+      }
+    } catch {
+      // Fallback: stored in local appointments
+    }
+
     toast.success("Phiếu hẹn tư vấn đã được gửi thành công!", {
       description: `Lịch hẹn với ${selectedAdvisor.name} đang ở trạng thái Chờ duyệt.`,
     });
   };
+
+  const currentAppointments = useMemo(() => {
+    if (serverAppointments && serverAppointments.length > 0) {
+      return serverAppointments.map((a) => ({
+        id: a.id,
+        advisorId: selectedAdvisor.id,
+        advisorName: selectedAdvisor.name,
+        subject: a.subject,
+        timeSlot: a.time_slot,
+        meetingType: a.meeting_type,
+        notes: a.notes || undefined,
+        status: a.status as "CONFIRMED" | "PENDING" | "COMPLETED",
+        createdAt: new Date(a.created_at).toLocaleDateString("vi-VN"),
+        location: a.location,
+      }));
+    }
+    return appointments;
+  }, [serverAppointments, appointments, selectedAdvisor.id, selectedAdvisor.name]);
 
   const handleCancelAppointment = (id: string) => {
     setAppointments((prev) => prev.filter((a) => a.id !== id));
@@ -752,14 +867,40 @@ export const StudentAdvisingPage = () => {
     }
   }, [actionTasks, actionStorageKey]);
 
+  // Filter tasks for selected advisor
+  const currentAdvisorTasks = useMemo(() => {
+    if (serverTasks && serverTasks.length > 0) {
+      return serverTasks.map((t) => ({
+        id: t.id,
+        advisorId: selectedAdvisor.id,
+        title: t.title,
+        description: t.description || undefined,
+        deadline: t.deadline,
+        priority: t.priority,
+        completed: t.completed,
+      }));
+    }
+    return actionTasks.filter((t) => t.advisorId === selectedAdvisor.id);
+  }, [serverTasks, actionTasks, selectedAdvisor.id]);
+
   // New task input state
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState<"HIGH" | "MEDIUM" | "NORMAL">("HIGH");
 
   const handleToggleTask = (taskId: string) => {
+    const task = currentAdvisorTasks.find((t) => t.id === taskId);
+    const nextCompleted = task ? !task.completed : true;
+
     setActionTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, completed: !t.completed } : t)),
+      prev.map((t) => (t.id === taskId ? { ...t, completed: nextCompleted } : t)),
     );
+
+    if (activeSessionId) {
+      toggleTaskMutation.mutate({
+        taskId,
+        payload: { completed: nextCompleted },
+      });
+    }
   };
 
   const handleAddTask = (e: React.FormEvent) => {
@@ -783,11 +924,6 @@ export const StudentAdvisingPage = () => {
   const handleDeleteTask = (taskId: string) => {
     setActionTasks((prev) => prev.filter((t) => t.id !== taskId));
   };
-
-  // Filter tasks for selected advisor
-  const currentAdvisorTasks = useMemo(() => {
-    return actionTasks.filter((t) => t.advisorId === selectedAdvisor.id);
-  }, [actionTasks, selectedAdvisor.id]);
 
   const taskCompletionRate = useMemo(() => {
     if (currentAdvisorTasks.length === 0) return 0;
@@ -1513,16 +1649,16 @@ export const StudentAdvisingPage = () => {
               <div className="space-y-3">
                 <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
                   <Calendar className="h-4 w-4 text-blue-600" />
-                  Lịch Hẹn Đã Đăng Ký ({appointments.length})
+                  Lịch Hẹn Đã Đăng Ký ({currentAppointments.length})
                 </h3>
 
-                {appointments.length === 0 ? (
+                {currentAppointments.length === 0 ? (
                   <Card className="border-slate-200 bg-white p-6 text-center shadow-xs">
                     <p className="text-xs text-slate-500">Chưa có phiếu hẹn nào được đăng ký.</p>
                   </Card>
                 ) : (
                   <div className="space-y-2.5">
-                    {appointments.map((apt) => (
+                    {currentAppointments.map((apt) => (
                       <Card key={apt.id} className="border-slate-200 bg-white shadow-xs">
                         <CardContent className="p-4">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">

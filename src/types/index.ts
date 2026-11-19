@@ -1,4 +1,5 @@
 export * from "./api"
+export * from "./advising"
 
 export interface PaginationParams {
   skip?: number
