@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthUser } from "@/features/auth";
+import { useActiveSemester, formatSemesterLabel } from "@/hooks/use-active-semester";
+import { score10ToGpa4, score10ToLetter } from "@/lib/grade-scale";
 import { cn } from "@/lib/utils";
 import type { CoursePredictionResponse } from "@/types";
 import {
@@ -33,28 +35,6 @@ import {
   useStudentSummary,
 } from "../api/student-api";
 
-function score10ToGpa4(score: number): number {
-  if (score >= 8.5) return 4.0;
-  if (score >= 8.0) return 3.5;
-  if (score >= 7.0) return 3.0;
-  if (score >= 6.5) return 2.5;
-  if (score >= 5.5) return 2.0;
-  if (score >= 5.0) return 1.5;
-  if (score >= 4.0) return 1.0;
-  return 0.0;
-}
-
-function score10ToLetter(score: number): string {
-  if (score >= 8.5) return "A";
-  if (score >= 8.0) return "B+";
-  if (score >= 7.0) return "B";
-  if (score >= 6.5) return "C+";
-  if (score >= 5.5) return "C";
-  if (score >= 5.0) return "D+";
-  if (score >= 4.0) return "D";
-  return "F";
-}
-
 export const StudentWhatIfPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const preselectedCourse = searchParams.get("course");
@@ -62,6 +42,7 @@ export const StudentWhatIfPage = () => {
 
   const { data: user } = useAuthUser();
   const studentId = user?.user_code || user?.id;
+  const { data: activeSemester } = useActiveSemester();
 
   // Real academic data queries
   const { data: summary, isLoading: isLoadingSummary } =
@@ -187,20 +168,27 @@ export const StudentWhatIfPage = () => {
       (sum, c) => sum + (c.credits || 0),
       0,
     );
-    const baselineGpa =
-      predictions?.predicted_semester_gpa4 ??
-      (summary?.cumulative_gpa ?? 3.0);
 
+    let baselineGradePoints = 0;
+    let baselinePredictedCredits = 0;
     let simGradePoints = 0;
     let simRiskCount = 0;
 
     for (const course of currentCourses) {
       const pred = predictionMap.get(course.course_code);
-      const score =
-        userScores[course.course_code] ??
-        (pred?.predicted_score10 ?? 7.0);
-      const gpa4 = score10ToGpa4(score);
-      simGradePoints += gpa4 * (course.credits || 0);
+      const credits = course.credits || 0;
+      const baseCourseGpa = pred?.predicted_gpa4 ?? score10ToGpa4(7.0);
+      if (pred && credits > 0) {
+        baselineGradePoints += pred.predicted_gpa4 * credits;
+        baselinePredictedCredits += credits;
+      }
+
+      const hasOverride = userScores[course.course_code] !== undefined;
+      const score = hasOverride
+        ? userScores[course.course_code]
+        : (pred?.predicted_score10 ?? 7.0);
+      const gpa4 = hasOverride ? score10ToGpa4(score) : baseCourseGpa;
+      simGradePoints += gpa4 * credits;
 
       // Course is considered at risk if simulated score < 5.0
       if (score < 5.0) {
@@ -208,7 +196,13 @@ export const StudentWhatIfPage = () => {
       }
     }
 
-    const simTermGpa = totalCredits > 0 ? simGradePoints / totalCredits : 0;
+    const baselineGpa =
+      baselinePredictedCredits > 0
+        ? Number((baselineGradePoints / baselinePredictedCredits).toFixed(2))
+        : (predictions?.predicted_semester_gpa4 ??
+          (summary?.cumulative_gpa ?? 3.0));
+
+    const simTermGpa = totalCredits > 0 ? Number((simGradePoints / totalCredits).toFixed(2)) : 0;
     const termDelta = Number((simTermGpa - baselineGpa).toFixed(2));
 
     // Projected Cumulative GPA
@@ -711,7 +705,9 @@ export const StudentWhatIfPage = () => {
                       variant="outline"
                       className="border-slate-700 bg-slate-800 text-[10px] text-slate-300"
                     >
-                      Semester 261
+                      {formatSemesterLabel(
+                        predictions?.semester_code || activeSemester?.semester_code,
+                      )}
                     </Badge>
                   </div>
                   <div className="mt-2 flex items-baseline gap-2">

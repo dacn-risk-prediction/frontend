@@ -22,6 +22,8 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthUser } from "@/features/auth";
+import { useActiveSemester, formatSemesterLabel } from "@/hooks/use-active-semester";
+import { score10ToLetter } from "@/lib/grade-scale";
 import { cn } from "@/lib/utils";
 import type { CoursePredictionResponse, ShapFactorResponse } from "@/types";
 import {
@@ -31,17 +33,6 @@ import {
   useStudentEnrollments,
 } from "../api/student-api";
 
-function score10ToLetter(score: number): string {
-  if (score >= 8.5) return "A";
-  if (score >= 8.0) return "B+";
-  if (score >= 7.0) return "B";
-  if (score >= 6.5) return "C+";
-  if (score >= 5.5) return "C";
-  if (score >= 5.0) return "D+";
-  if (score >= 4.0) return "D";
-  return "F";
-}
-
 export const StudentSimulationPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -49,6 +40,7 @@ export const StudentSimulationPage = () => {
 
   const { data: user } = useAuthUser();
   const studentId = user?.user_code || user?.id;
+  const { data: activeSemester } = useActiveSemester();
 
   // 1. Fetch holistic semester predictions (GET /api/v1/predictions/students/{id})
   const {
@@ -168,7 +160,29 @@ export const StudentSimulationPage = () => {
     return predictions?.at_risk_count ?? 0;
   }, [activeCourses, predictionMap, predictions]);
 
-  const predictedSemesterGpa = predictions?.predicted_semester_gpa4 ?? 0;
+  const predictedSemesterGpa = useMemo(() => {
+    if (!predictions) return 0;
+    if (activeCourses.length > 0) {
+      let weightedSum = 0;
+      let totalCreds = 0;
+      for (const course of activeCourses) {
+        const pred = predictionMap.get(course.course_code);
+        if (pred && (course.credits || 0) > 0) {
+          weightedSum += pred.predicted_gpa4 * course.credits;
+          totalCreds += course.credits;
+        }
+      }
+      if (totalCreds > 0) {
+        return Number((weightedSum / totalCreds).toFixed(2));
+      }
+    }
+    return predictions.predicted_semester_gpa4 ?? 0;
+  }, [predictions, activeCourses, predictionMap]);
+
+  const isPredictionUnavailable = !isLoading && !predictions;
+  const termLabel = formatSemesterLabel(
+    predictions?.semester_code || activeSemester?.semester_code
+  );
 
   return (
     <div className="space-y-6 pb-12">
@@ -181,7 +195,7 @@ export const StudentSimulationPage = () => {
               AI Simulation & Prediction
             </span>
             <span className="text-xs font-medium text-slate-500">
-              Semester 261 • TreeSHAP XAI
+              {termLabel} • TreeSHAP XAI
             </span>
           </div>
           <h1 className="mt-1 font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
@@ -223,6 +237,36 @@ export const StudentSimulationPage = () => {
           </Button>
         </div>
       </div>
+
+      {/* Fallback banner when AI Model Service is unreachable or has no forecast */}
+      {isPredictionUnavailable && activeCourses.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-xs text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div>
+              <p className="font-bold text-amber-950">
+                AI Model Service Unavailable
+              </p>
+              <p className="mt-0.5 text-amber-800">
+                Unable to retrieve live failure probabilities or TreeSHAP explanations (the ML inference service may be offline or no forecast exists for this term yet).
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              refetchPredictions();
+              refetchSingle();
+            }}
+            disabled={isRefetching}
+            className="w-fit shrink-0 cursor-pointer border-amber-300 bg-white text-xs font-semibold text-amber-900 hover:bg-amber-100"
+          >
+            <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", isRefetching && "animate-spin")} />
+            Retry AI
+          </Button>
+        </div>
+      )}
 
       {/* 2. Holistic Semester KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -275,6 +319,11 @@ export const StudentSimulationPage = () => {
               <div className="mt-2 flex items-baseline gap-2">
                 {isLoading ? (
                   <Skeleton className="h-9 w-28 bg-slate-800" />
+                ) : isPredictionUnavailable ? (
+                  <div className="flex items-center gap-1.5 text-amber-400">
+                    <AlertTriangle className="h-6 w-6 shrink-0" />
+                    <span className="text-2xl font-bold tracking-tight">AI Offline</span>
+                  </div>
                 ) : atRiskCount === 0 ? (
                   <div className="flex items-center gap-1.5 text-emerald-400">
                     <ShieldCheck className="h-6 w-6 shrink-0" />
@@ -293,10 +342,16 @@ export const StudentSimulationPage = () => {
             <div
               className={cn(
                 "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ring-1 ring-slate-700/50",
-                atRiskCount === 0 ? "bg-emerald-950/50 text-emerald-400" : "bg-rose-950/50 text-rose-400"
+                isPredictionUnavailable
+                  ? "bg-amber-950/50 text-amber-400"
+                  : atRiskCount === 0
+                    ? "bg-emerald-950/50 text-emerald-400"
+                    : "bg-rose-950/50 text-rose-400"
               )}
             >
-              {atRiskCount === 0 ? (
+              {isPredictionUnavailable ? (
+                <AlertTriangle className="h-5 w-5" />
+              ) : atRiskCount === 0 ? (
                 <CheckCircle2 className="h-5 w-5" />
               ) : (
                 <AlertTriangle className="h-5 w-5" />
@@ -304,9 +359,11 @@ export const StudentSimulationPage = () => {
             </div>
           </div>
           <p className="mt-3 text-xs text-slate-400">
-            {atRiskCount === 0
-              ? "All registered courses currently meet pass thresholds"
-              : `${atRiskCount} of ${totalCourses} active courses need focused intervention`}
+            {isPredictionUnavailable
+              ? "Prediction service is currently unreachable or returned no records"
+              : atRiskCount === 0
+                ? "All registered courses currently meet pass thresholds"
+                : `${atRiskCount} of ${totalCourses} active courses need focused intervention`}
           </p>
         </div>
 
@@ -437,7 +494,9 @@ export const StudentSimulationPage = () => {
                         </span>
                       </div>
                     ) : (
-                      <span className="italic text-slate-400">Evaluating...</span>
+                      <span className="italic text-slate-400">
+                        {isLoadingPredictions ? "Evaluating..." : "No AI data"}
+                      </span>
                     )}
                   </div>
                 </button>
@@ -709,7 +768,17 @@ export const StudentSimulationPage = () => {
               </CardHeader>
 
               <CardContent className="space-y-3">
-                {activePrediction?.risk_level === "HIGH" ? (
+                {!activePrediction ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-700 space-y-2">
+                    <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                      <Info className="h-4 w-4 text-slate-500 shrink-0" />
+                      {isLoadingCourseDetail ? "Loading Recommendations..." : "No AI Forecast Available"}
+                    </div>
+                    <p className="leading-relaxed text-slate-600">
+                      Personalized risk recommendations will appear once the AI prediction service returns an evaluation for this course. You can still test target scores in the What-If Simulator.
+                    </p>
+                  </div>
+                ) : activePrediction.risk_level === "HIGH" ? (
                   <div className="rounded-lg border border-rose-200 bg-rose-50/60 p-3.5 text-xs text-rose-900 space-y-2">
                     <div className="flex items-center gap-1.5 font-bold text-rose-950">
                       <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />

@@ -111,7 +111,9 @@ export const getStudentEnrollments = async (
     const response = await apiClient.get<Enrollment[]>(
       `/enrollments/students/${studentId}`,
       {
-        params: semesterCode ? { semester_code: semesterCode } : undefined,
+        params: semesterCode
+          ? { semester_code: semesterCode, limit: 500 }
+          : { limit: 500 },
       }
     )
     return response.data

@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuthUser } from "@/features/auth";
+import { useActiveSemester } from "@/hooks/use-active-semester";
 import {
   useStudentSummary,
   useStudentDetail,
@@ -42,6 +43,8 @@ export const StudentAlertsPage = () => {
   const navigate = useNavigate();
   const { data: user } = useAuthUser();
   const studentId = user?.user_code || user?.id;
+  const { data: activeSemesterData } = useActiveSemester();
+  const resolvedActiveSemester = activeSemesterData?.semester_code || "HK261";
 
   // Real Student API Data
   const { data: summary, isLoading: isLoadingSummary } =
@@ -93,17 +96,6 @@ export const StudentAlertsPage = () => {
 
     if (summary && summary.total_passed_credits >= DEGREE_TOTAL_CREDITS) {
       return true;
-    }
-
-    if (summary?.semester_gpas && summary.semester_gpas.length > 0) {
-      const lastTerm = summary.semester_gpas[summary.semester_gpas.length - 1];
-      if (
-        lastTerm.semester_code !== "HK261" &&
-        (summary.total_passed_credits >= 110 ||
-          Number(lastTerm.passed_credits ?? 0) > 0)
-      ) {
-        return true;
-      }
     }
 
     return false;
@@ -171,7 +163,7 @@ export const StudentAlertsPage = () => {
             description: `Your term GPA declined from ${prevGpa.toFixed(2)} in ${prev.semester_code} to ${lastGpa.toFixed(2)} in ${last.semester_code} (${delta.toFixed(2)} drop). Analyzing past course grades can help identify core subject areas for reinforcement.`,
             timestamp: `Semester ${last.semester_code} Review`,
             actionText: "View Academic Record",
-            actionLink: "/student/academic-record",
+            actionLink: "/student/record",
             category: "RISK",
           });
         }
@@ -180,7 +172,7 @@ export const StudentAlertsPage = () => {
 
     // 3. Retaken Courses in Active Semester
     const activeSemester =
-      currentCourses?.[0]?.class_id?.split("_")[0] || "HK261";
+      currentCourses?.[0]?.class_id?.split("_")[0] || resolvedActiveSemester;
 
     if (currentCourses && currentCourses.length > 0) {
       const retakenCourses = currentCourses.filter((c) => c.retaken);
@@ -200,10 +192,16 @@ export const StudentAlertsPage = () => {
       }
     }
 
-    // 4. Failed Prerequisite Alert from Enrollments
+    // 4. Failed Prerequisite Alert from Enrollments (only genuinely failed courses, not passed D/D+ grades)
     if (enrollments && enrollments.length > 0) {
+      const passedCourseCodes = new Set(
+        enrollments.filter((e) => e.passed === true).map((e) => e.course_code),
+      );
       const failed = enrollments.filter(
-        (e) => e.passed === false || (e.gpa_4 !== null && e.gpa_4 < 2.0),
+        (e) =>
+          (e.passed === false ||
+            (e.passed !== true && e.gpa_4 !== null && e.gpa_4 < 1.0)) &&
+          !passedCourseCodes.has(e.course_code),
       );
       // Exclude courses currently being retaken in current semester
       const activeRetakingCodes = new Set(
@@ -223,7 +221,7 @@ export const StudentAlertsPage = () => {
           description: `Course ${topCourse.course_code} recorded an unpassed grade (${topCourse.letter_grade ?? "F"}) in semester ${topCourse.semester_code}. Ensure you plan re-enrollment in upcoming terms to satisfy prerequisite requirements for higher-level courses.`,
           timestamp: `Recorded in ${topCourse.semester_code}`,
           actionText: "Inspect Full Transcript",
-          actionLink: "/student/academic-record",
+          actionLink: "/student/record",
           category: "RISK",
         });
       }
@@ -279,7 +277,7 @@ export const StudentAlertsPage = () => {
         description: `Congratulations! Official university records confirm that you have satisfied degree requirements for ${studentDetail?.major ? studentDetail.major : "Computer Science"} with ${passedCredits} completed credits, officially conferred in semester ${graduateSemester}.`,
         timestamp: `Graduated in ${graduateSemester}`,
         actionText: "View Official Degree Record",
-        actionLink: "/student/academic-record",
+        actionLink: "/student/record",
         category: "DEGREE",
       });
     } else if (passedCredits >= 100) {
@@ -292,7 +290,7 @@ export const StudentAlertsPage = () => {
         description: `You have successfully completed ${passedCredits} out of ${DEGREE_TOTAL_CREDITS} bachelor credits (${remainingCredits} credits remaining). You are on track for senior graduation audit and capstone evaluation.`,
         timestamp: "Degree Progress Audit",
         actionText: "Audit Degree Progress",
-        actionLink: "/student/academic-record",
+        actionLink: "/student/record",
         category: "DEGREE",
       });
     } else if (summary && passedCredits === 0) {
@@ -321,6 +319,7 @@ export const StudentAlertsPage = () => {
     passedCredits,
     remainingCredits,
     studentDetail,
+    resolvedActiveSemester,
   ]);
 
   // Filtered alerts

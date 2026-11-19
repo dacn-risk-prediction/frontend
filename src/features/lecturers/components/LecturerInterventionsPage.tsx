@@ -8,12 +8,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { apiClient } from "@/lib/api-client";
 import { useAuthUser } from "@/features/auth";
 import {
   useLecturerCurrentClasses,
   useAllClassesEnrollments,
+  useActiveSemester,
 } from "../api/lecturer-api";
-import type { Enrollment } from "@/types";
+import type { Enrollment, StudentDetail } from "@/types";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -44,6 +46,8 @@ export const LecturerInterventionsPage = () => {
 
   const { data: classes = [], isLoading: isLoadingClasses } =
     useLecturerCurrentClasses(lecturerId);
+  const { data: activeSemester } = useActiveSemester();
+  const activeSemesterCode = activeSemester?.semester_code || "HK261";
 
   const classIds = useMemo(() => classes.map((c) => c.class_id), [classes]);
   const enrollmentsQueries = useAllClassesEnrollments(classIds);
@@ -178,12 +182,22 @@ export const LecturerInterventionsPage = () => {
     toast.success(`Intervention recorded for student ${studentId}`);
   };
 
-  const handleNotify = (studentId: string, courseCode: string) => {
-    const subject = encodeURIComponent(`[${courseCode}] Academic Advising Notice`);
-    const body = encodeURIComponent(
-      `Dear Student ${studentId},\n\nI am contacting you regarding your performance in ${courseCode}. Please schedule an appointment during my office hours to discuss academic support strategies.\n\nBest regards,\nFaculty Member`,
-    );
-    window.open(`mailto:${studentId}@hcmut.edu.vn?subject=${subject}&body=${body}`, "_self");
+  const handleNotify = async (studentId: string, courseCode: string) => {
+    try {
+      const response = await apiClient.get<StudentDetail>(`/students/${studentId}`);
+      const studentEmail = response.data?.user?.email;
+      if (!studentEmail) {
+        toast.error(`No institutional email found for student ${studentId}.`);
+        return;
+      }
+      const subject = encodeURIComponent(`[${courseCode}] Academic Advising Notice`);
+      const body = encodeURIComponent(
+        `Dear Student ${studentId},\n\nI am contacting you regarding your performance in ${courseCode}. Please schedule an appointment during my office hours to discuss academic support strategies.\n\nBest regards,\nFaculty Member`,
+      );
+      window.open(`mailto:${studentEmail}?subject=${subject}&body=${body}`, "_self");
+    } catch {
+      toast.error(`Unable to look up email address for student ${studentId}.`);
+    }
   };
 
   const criticalCount = interventions.filter((i) => i.riskLevel === "CRITICAL").length;
@@ -396,7 +410,7 @@ export const LecturerInterventionsPage = () => {
                   </div>
 
                   <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
-                    <span className="text-[11px] text-slate-400">Active HK261</span>
+                    <span className="text-[11px] text-slate-400">Active {activeSemesterCode}</span>
                     <div className="flex items-center gap-1.5">
                       <Button
                         variant="outline"

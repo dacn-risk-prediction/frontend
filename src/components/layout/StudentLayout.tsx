@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuthUser, useLogout } from "@/features/auth";
+import { useActiveSemester, formatSemesterLabel } from "@/hooks/use-active-semester";
 import { cn } from "@/lib/utils";
 import {
   Bell,
@@ -62,7 +63,6 @@ const NAV_ITEMS: NavItem[] = [
     name: "Alerts",
     href: "/student/alerts",
     icon: Bell,
-    badge: 2,
   },
   {
     name: "Settings",
@@ -75,6 +75,7 @@ export const StudentLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: user } = useAuthUser();
+  const { data: activeSemester } = useActiveSemester();
   const logout = useLogout();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -205,7 +206,7 @@ export const StudentLayout = () => {
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold text-slate-800">
-                Semester 261
+                {formatSemesterLabel(activeSemester?.semester_code)}
               </p>
               <p className="truncate text-[11px] text-slate-500">
                 Term Active • HCMUT
