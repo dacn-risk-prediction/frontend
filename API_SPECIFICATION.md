@@ -1167,6 +1167,91 @@ Returned when payload fails validation (e.g. invalid email format, missing requi
 
 ---
 
+#### 4. Predict Risk & Batch Analytics for an Entire Class (Lecturer / Admin)
+
+- **Endpoint**: `GET /api/v1/predictions/classes/{class_id}`
+- **Alternative POST**: `POST /api/v1/predictions/class` with body `{"class_id": "HK261_CO1023_L02", "include_shap": true}`
+- **Auth Required**: Yes (`ROLE_LECTURER` who teaches the class, or `ROLE_ADMIN`. `ROLE_STUDENT` receives `403 Forbidden`)
+- **Query Parameters**:
+  - `include_shap` (*boolean*, optional, default: `true`): Whether to include top SHAP explanatory risk factors per student
+- **Description**: Vectorized high-speed batch prediction for an entire class (40–120 students in ~0.08s). Returns aggregated class risk analytics, predicted grade distribution, common class-level risk drivers, and student rankings sorted descending by `fail_probability` (highest risk first), enriched with course metadata, section, lecturer name, and student names from the database.
+- **Response (`200 OK`)**: `ClassPredictionResponse`
+  ```json
+  {
+    "class_id": "HK261_CO1023_L02",
+    "course_code": "CO1023",
+    "course_name": "Hệ thống số",
+    "credits": 3,
+    "class_group": "L02",
+    "lecturer_name": "Đặng Anh Phúc",
+    "semester_code": "HK261",
+    "inference_time_ms": 78.78,
+    "analytics": {
+      "total_students": 40,
+      "high_risk_count": 2,
+      "medium_risk_count": 5,
+      "low_risk_count": 33,
+      "high_risk_rate": 0.05,
+      "average_predicted_score10": 7.82,
+      "average_predicted_gpa4": 3.21,
+      "grade_distribution": {
+        "A": 11,
+        "B+": 6,
+        "B": 15,
+        "C+": 6,
+        "C": 2,
+        "D+": 0,
+        "D": 0,
+        "F": 0
+      },
+      "top_class_risk_factors": [
+        {
+          "feature": "lab",
+          "mean_shap": 0.1716,
+          "impact": "INCREASE_RISK",
+          "description": "Điểm bài tập thực hành/thí nghiệm (lab) dưới mức trung bình là yếu tố rủi ro cao nhất đối với sinh viên lớp này."
+        }
+      ]
+    },
+    "students": [
+      {
+        "student_id": "2642009",
+        "student_name": "Nguyễn Văn C",
+        "fail_probability": 0.952,
+        "predicted_course_fail": 1,
+        "is_at_risk": true,
+        "risk_level": "HIGH",
+        "predicted_score10": 3.5,
+        "predicted_gpa4": 1.0,
+        "predicted_letter_grade": "D",
+        "current_marks": {
+          "quiz": 3.0,
+          "lab": 2.5,
+          "btl": null,
+          "giua_ky": 4.0,
+          "cuoi_ky": null
+        },
+        "top_shap_factors": [
+          {
+            "feature": "lab",
+            "value": 2.5,
+            "shap_value": 0.42,
+            "impact": "INCREASE_RISK",
+            "description": "Điểm lab (2.5) thấp làm tăng nguy cơ rớt môn."
+          }
+        ]
+      }
+    ]
+  }
+  ```
+- **Error Codes**:
+  - `401 Unauthorized`: Token invalid or expired.
+  - `403 Forbidden`: Authenticated user is a student, or a lecturer attempting to view a class they do not teach (`{"detail": "Access forbidden: lecturers can only access predictions for classes they teach"}`).
+  - `404 Not Found`: Class ID not found in database or model cache (`{"detail": "Class 'HK261_CO1023_L99' not found in database"}`).
+  - `503 Service Unavailable`: AI Model Service is unreachable or timed out.
+
+---
+
 ### Academic Advising & Two-Way Messaging
 
 #### 1. Get Unread Notification Count
@@ -1801,6 +1886,57 @@ export interface ModelHealth {
   fail_threshold: number;
   total_records_cached: number;
   metrics: Record<string, any>;
+}
+
+export interface ClassRiskFactor {
+  feature: string;
+  mean_shap: number;
+  impact: FeatureImpact;
+  description: string;
+}
+
+export interface ClassRiskAnalytics {
+  total_students: number;
+  high_risk_count: number;
+  medium_risk_count: number;
+  low_risk_count: number;
+  high_risk_rate: number;
+  average_predicted_score10: number;
+  average_predicted_gpa4: number;
+  grade_distribution: Record<string, number>;
+  top_class_risk_factors: ClassRiskFactor[];
+}
+
+export interface ClassStudentPrediction {
+  student_id: string;
+  student_name: string | null;
+  fail_probability: number;
+  predicted_course_fail: number;
+  is_at_risk: boolean;
+  risk_level: RiskLevel;
+  predicted_score10: number;
+  predicted_gpa4: number;
+  predicted_letter_grade: string;
+  current_marks: Record<string, number | null>;
+  top_shap_factors: ShapFactor[];
+}
+
+export interface ClassPrediction {
+  class_id: string;
+  course_code: string;
+  course_name: string | null;
+  credits: number | null;
+  class_group: string | null;
+  lecturer_name: string | null;
+  semester_code: string;
+  inference_time_ms: number;
+  analytics: ClassRiskAnalytics;
+  students: ClassStudentPrediction[];
+}
+
+export interface PredictClassPayload {
+  class_id: string;
+  include_shap?: boolean;
 }
 
 // ==========================================

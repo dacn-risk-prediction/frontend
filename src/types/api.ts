@@ -363,4 +363,64 @@ export interface ModelHealthResponse {
   metrics: Record<string, any>
 }
 
+export interface ClassRiskFactor {
+  feature: string
+  mean_shap: number
+  impact: ShapImpact
+  description: string
+}
+
+export interface ClassRiskAnalytics {
+  total_students: number
+  high_risk_count: number
+  medium_risk_count: number
+  low_risk_count: number
+  high_risk_rate: number
+  average_predicted_score10: number
+  average_predicted_gpa4: number
+  grade_distribution: Record<string, number>
+  top_class_risk_factors: ClassRiskFactor[]
+}
+
+export interface ClassStudentPrediction {
+  student_id: string
+  student_name: string | null
+  fail_probability: number
+  predicted_course_fail: number
+  is_at_risk: boolean
+  risk_level: RiskLevel
+  predicted_score10: number
+  predicted_gpa4: number
+  predicted_letter_grade: string
+  current_marks: {
+    quiz?: number | null
+    lab?: number | null
+    btl?: number | null
+    giua_ky?: number | null
+    cuoi_ky?: number | null
+    [key: string]: number | null | undefined
+  }
+  top_shap_factors: ShapFactorResponse[]
+}
+
+export interface ClassPrediction {
+  class_id: string
+  course_code: string
+  course_name: string | null
+  credits: number | null
+  class_group: string | null
+  lecturer_name: string | null
+  semester_code: string
+  inference_time_ms: number
+  analytics: ClassRiskAnalytics
+  students: ClassStudentPrediction[]
+}
+
+export type ClassPredictionResponse = ClassPrediction
+
+export interface PredictClassPayload {
+  class_id: string
+  include_shap?: boolean
+}
+
 

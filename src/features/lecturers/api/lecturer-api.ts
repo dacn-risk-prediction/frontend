@@ -9,6 +9,7 @@ import type {
   LecturerCurrentClassItem,
   LecturerDetail,
   Enrollment,
+  ClassPrediction,
 } from "@/types";
 
 export {
@@ -25,6 +26,11 @@ export const LECTURER_DETAIL_QUERY_KEY = (lecturerId?: string) =>
 
 export const CLASS_ENROLLMENTS_QUERY_KEY = (classId?: string) =>
   ["enrollments", "classes", classId] as const;
+
+export const CLASS_PREDICTIONS_QUERY_KEY = (
+  classId?: string,
+  includeShap: boolean = true
+) => ["predictions", "classes", classId, includeShap] as const;
 
 /**
  * Fetch classes taught by lecturer in the current active semester
@@ -104,6 +110,36 @@ export const getClassEnrollments = async (
   }
 };
 
+/**
+ * Fetch AI predictions and risk analytics for an entire class (Batch inference)
+ * GET /api/v1/predictions/classes/{class_id}?include_shap=true
+ */
+export const getClassPredictions = async (
+  classId: string,
+  includeShap: boolean = true
+): Promise<ClassPrediction | null> => {
+  try {
+    const response = await apiClient.get<ClassPrediction>(
+      `/predictions/classes/${classId}`,
+      {
+        params: { include_shap: includeShap },
+      }
+    );
+    return response.data;
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error &&
+      ((error as { response?: { status?: number } }).response?.status === 404 ||
+        (error as { response?: { status?: number } }).response?.status === 503)
+    ) {
+      return null;
+    }
+    throw error;
+  }
+};
+
 // ==========================================
 // TanStack Query Hooks
 // ==========================================
@@ -130,6 +166,18 @@ export const useClassEnrollments = (classId?: string) => {
   return useQuery({
     queryKey: CLASS_ENROLLMENTS_QUERY_KEY(classId),
     queryFn: () => getClassEnrollments(classId!),
+    enabled: Boolean(classId),
+    staleTime: 5 * 60 * 1000,
+  });
+};
+
+export const useClassPredictions = (
+  classId?: string,
+  includeShap: boolean = true
+) => {
+  return useQuery({
+    queryKey: CLASS_PREDICTIONS_QUERY_KEY(classId, includeShap),
+    queryFn: () => getClassPredictions(classId!, includeShap),
     enabled: Boolean(classId),
     staleTime: 5 * 60 * 1000,
   });
