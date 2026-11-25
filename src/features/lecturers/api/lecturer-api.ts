@@ -1,5 +1,6 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { AUTH_QUERY_KEY } from "@/features/auth";
 import {
   ACTIVE_SEMESTER_QUERY_KEY,
   getActiveSemester,
@@ -9,8 +10,12 @@ import type {
   ClassPrediction,
   CourseAssessment,
   Enrollment,
+  Lecturer,
   LecturerCurrentClassItem,
   LecturerDetail,
+  LecturerUpdatePayload,
+  User,
+  UserUpdatePayload,
 } from "@/types";
 
 export {
@@ -242,5 +247,44 @@ export const useCourseAssessment = (courseCode?: string) => {
     queryFn: () => getCourseAssessment(courseCode!),
     enabled: Boolean(courseCode),
     staleTime: 30 * 60 * 1000,
+  });
+};
+
+export const useUpdateLecturerProfile = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      lecturerId,
+      userPayload,
+      lecturerPayload,
+    }: {
+      userId: string;
+      lecturerId?: string;
+      userPayload: UserUpdatePayload;
+      lecturerPayload?: LecturerUpdatePayload;
+    }) => {
+      const updatedUser = await apiClient.put<User>(
+        `/users/${userId}`,
+        userPayload,
+      );
+      let updatedLecturer: Lecturer | null = null;
+      if (lecturerId && lecturerPayload) {
+        const res = await apiClient.put<Lecturer>(
+          `/lecturers/${encodeURIComponent(lecturerId)}`,
+          lecturerPayload,
+        );
+        updatedLecturer = res.data;
+      }
+      return { user: updatedUser.data, lecturer: updatedLecturer };
+    },
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEY });
+      if (variables.lecturerId) {
+        void queryClient.invalidateQueries({
+          queryKey: LECTURER_DETAIL_QUERY_KEY(variables.lecturerId),
+        });
+      }
+    },
   });
 };

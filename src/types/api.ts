@@ -206,6 +206,85 @@ export interface CoursePrerequisiteCreatePayload {
 }
 
 // ==========================================
+// Admin Types
+// ==========================================
+export interface Admin {
+  admin_id: string
+  department: string
+  user_id: string | null
+}
+
+export interface AdminDetail extends Admin {
+  user: User | null
+}
+
+export interface AdminCreatePayload {
+  admin_id: string
+  department?: string
+  user_id?: string | null
+}
+
+export interface AdminUpdatePayload {
+  department?: string
+  user_id?: string | null
+}
+
+export interface AdminSystemStats {
+  users_count: number
+  students_count: number
+  lecturers_count: number
+  admins_count: number
+  courses_count: number
+  active_classes_count: number
+  semesters_count: number
+  curriculums_count: number
+  active_semester_code: string | null
+}
+
+// ==========================================
+// Curriculum & Knowledge Block Types
+// ==========================================
+export interface KnowledgeBlock {
+  block_id: string
+  block_code: string | null
+  block_name_vi: string
+  block_name_en: string | null
+  category: string | null
+  required_credits: number | null
+  description: string | null
+}
+
+export interface Curriculum {
+  curriculum_id: string
+  curriculum_name: string
+  major_code: string
+  major_name: string
+  cohort: string
+  academic_year_start: number | null
+  total_credits: number | null
+  base_curriculum_id: string | null
+  faculty: string | null
+}
+
+export interface CurriculumStructureItem {
+  structure_id: number
+  curriculum_id: string | null
+  course_code: string | null
+  block_id: string | null
+  course_type: string | null
+  elective_group: string | null
+  specialization: string | null
+  credits: number | null
+  recommended_semester: string | null
+  prerequisites: string | null
+  knowledge_block: KnowledgeBlock | null
+}
+
+export interface CurriculumDetail extends Curriculum {
+  structures: CurriculumStructureItem[]
+}
+
+// ==========================================
 // Semester Types
 // ==========================================
 export interface Semester {
@@ -213,17 +292,22 @@ export interface Semester {
   academic_year: string
   term: number
   is_active?: boolean
+  withdraw_deadline?: string | null
 }
 
 export interface SemesterCreatePayload {
   semester_code: string
   academic_year: string
   term: number
+  is_active?: boolean
+  withdraw_deadline?: string | null
 }
 
 export interface SemesterUpdatePayload {
   academic_year?: string
   term?: number
+  is_active?: boolean
+  withdraw_deadline?: string | null
 }
 
 // ==========================================

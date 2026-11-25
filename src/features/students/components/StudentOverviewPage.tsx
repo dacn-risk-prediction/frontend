@@ -16,7 +16,11 @@ import {
   ArrowRight,
   Award,
   BookOpen,
+  CheckCircle2,
+  Clock,
+  Globe,
   GraduationCap,
+  HeartHandshake,
   Minus,
   Sparkles,
   TrendingDown,
@@ -27,7 +31,9 @@ import {
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  useAllCourses,
   useStudentCurrentCourses,
+  useStudentDetail,
   useStudentEnrollments,
   useStudentSummary,
 } from "../api/student-api";
@@ -48,13 +54,15 @@ export const StudentOverviewPage = () => {
   // Fetch real Academic Summary & Semester GPA History
   const { data: summary, isLoading: isLoadingSummary } =
     useStudentSummary(studentId);
+  const { data: studentDetail } = useStudentDetail(studentId);
 
   // Fetch real current registered courses (GET /students/{id}/current)
   const { data: currentCourses, isLoading: isLoadingCourses } =
     useStudentCurrentCourses(studentId);
 
-  // Fetch student enrollments to identify exempted courses (final_score === 12)
+  // Fetch student enrollments & course catalog to identify exempted courses (final_score === 12)
   const { data: enrollments } = useStudentEnrollments(studentId);
+  const { data: allCourses } = useAllCourses();
 
   // Lookup set of exempted courses (final_score === 12)
   const exemptedCourseSet = useMemo(() => {
@@ -143,9 +151,16 @@ export const StudentOverviewPage = () => {
   const uncountedExemptedCredits = useMemo(() => {
     if (!enrollments) return 0;
     const courseCreditsMap = new Map<string, number>();
+    if (allCourses) {
+      for (const c of allCourses) {
+        courseCreditsMap.set(c.course_code, Number(c.credits) || 0);
+      }
+    }
     if (currentCourses) {
       for (const c of currentCourses) {
-        courseCreditsMap.set(c.course_code, Number(c.credits) || 0);
+        if (!courseCreditsMap.has(c.course_code)) {
+          courseCreditsMap.set(c.course_code, Number(c.credits) || 0);
+        }
       }
     }
     return enrollments.reduce((acc, e) => {
@@ -159,7 +174,7 @@ export const StudentOverviewPage = () => {
       }
       return acc;
     }, 0);
-  }, [enrollments, currentCourses]);
+  }, [enrollments, allCourses, currentCourses]);
 
   const passedCredits =
     (summary?.total_passed_credits ?? 0) + uncountedExemptedCredits;
@@ -169,7 +184,7 @@ export const StudentOverviewPage = () => {
   );
   const remainingCredits = Math.max(0, DEGREE_TOTAL_CREDITS - passedCredits);
 
-  // 4. Overall Status computation (Graduated vs Active Term Enrollment)
+  // 4. Overall Status computation (consistent with StudentAcademicRecordPage, no hardcoded term)
   const isGraduated = useMemo(() => {
     if (typeof summary?.is_graduated === "boolean") {
       return summary.is_graduated;
@@ -185,24 +200,12 @@ export const StudentOverviewPage = () => {
       return true;
     }
 
-    if (summary && summary.total_passed_credits >= DEGREE_TOTAL_CREDITS) {
+    if (summary && passedCredits >= DEGREE_TOTAL_CREDITS) {
       return true;
     }
 
-    // Historical student: finished past terms and not currently enrolled in active term HK261
-    if (summary?.semester_gpas && summary.semester_gpas.length > 0) {
-      const lastTerm = summary.semester_gpas[summary.semester_gpas.length - 1];
-      if (
-        lastTerm.semester_code !== "HK261" &&
-        (summary.total_passed_credits >= 110 ||
-          Number(lastTerm.passed_credits ?? 0) > 0)
-      ) {
-        return true;
-      }
-    }
-
     return false;
-  }, [user?.title, summary]);
+  }, [user?.title, summary, passedCredits]);
 
   const graduateSemester = useMemo(() => {
     if (summary?.semester_gpas && summary.semester_gpas.length > 0) {
@@ -553,6 +556,222 @@ export const StudentOverviewPage = () => {
           </div>
         </div>
       </div>
+
+      {/* 2.5 Graduation Readiness — 3 Pillars (Academic, English, CTXH) */}
+      <Card className="border-slate-200 bg-white shadow-xs">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base font-bold text-slate-900">
+                <GraduationCap className="h-4.5 w-4.5 text-blue-600" />
+                Tiến độ 3 Trụ cột Điều kiện Tốt nghiệp
+              </CardTitle>
+              <CardDescription className="text-xs text-slate-500">
+                Theo dõi đồng bộ Học vụ (128 TC &amp; GPA ≥ 2.0), Chuẩn Ngoại ngữ và Ngày Công tác xã hội (CTXH).
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/student/record?tab=curriculum")}
+              className="h-8 w-fit cursor-pointer gap-1.5 text-xs"
+            >
+              <span>Xem Khung CTĐT</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {/* Pillar 1: Academic */}
+          {(() => {
+            const academicMet =
+              passedCredits >= DEGREE_TOTAL_CREDITS && cumulativeGpa >= 2.0;
+            const gpaOk = isFirstTermOnly || cumulativeGpa >= 2.0;
+            return (
+              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
+                      <BookOpen className="h-4 w-4" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-900">
+                      1. Trụ cột Học vụ
+                    </span>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[10px] font-semibold",
+                      academicMet
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-blue-200 bg-blue-50 text-blue-700",
+                    )}
+                  >
+                    {academicMet ? "Đã đạt" : `${creditsPercentage}%`}
+                  </Badge>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-baseline justify-between text-xs">
+                    <span className="text-slate-600">Tín chỉ tích lũy</span>
+                    <span className="font-mono font-bold text-slate-900">
+                      {passedCredits} / {DEGREE_TOTAL_CREDITS} TC
+                    </span>
+                  </div>
+                  <Progress
+                    value={creditsPercentage}
+                    className="h-2 bg-slate-200 **:data-[slot=progress-indicator]:bg-blue-600"
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    GPA tích lũy:{" "}
+                    <strong
+                      className={cn(
+                        gpaOk ? "text-emerald-700" : "text-rose-600",
+                      )}
+                    >
+                      {isFirstTermOnly ? "Đang xét kỳ 1" : `${cumulativeGpa.toFixed(2)}/4.0`}
+                    </strong>{" "}
+                    (yêu cầu ≥ 2.0)
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Pillar 2: English Proficiency */}
+          {(() => {
+            const englishPassed = studentDetail?.english_pass === true;
+            const englishUnknown =
+              studentDetail?.english_pass === null ||
+              studentDetail?.english_pass === undefined;
+            return (
+              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={cn(
+                        "flex h-8 w-8 items-center justify-center rounded-lg",
+                        englishPassed
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-amber-100 text-amber-700",
+                      )}
+                    >
+                      <Globe className="h-4 w-4" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-900">
+                      2. Trụ cột Ngoại ngữ
+                    </span>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[10px] font-semibold",
+                      englishPassed
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-amber-200 bg-amber-50 text-amber-800",
+                    )}
+                  >
+                    {englishPassed
+                      ? "Đạt chuẩn"
+                      : englishUnknown
+                        ? "Chưa cập nhật"
+                        : "Chưa đạt"}
+                  </Badge>
+                </div>
+
+                <div className="flex items-start gap-2 pt-0.5">
+                  {englishPassed ? (
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                  ) : (
+                    <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  )}
+                  <p className="text-xs leading-relaxed text-slate-600">
+                    {englishPassed
+                      ? "Bạn đã hoàn thành chuẩn Tiếng Anh đầu ra theo quy định đào tạo."
+                      : "Cần nộp chứng chỉ Tiếng Anh đầu ra hoặc hoàn thành các học phần Anh văn chuẩn trước khi xét tốt nghiệp."}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Pillar 3: Social Work Days (CTXH) */}
+          {(() => {
+            const ctxhDays = Number(studentDetail?.ctxh_days ?? 0);
+            const ctxhTarget = 15;
+            const ctxhKltnMilestone = 12;
+            const ctxhPercent = Math.min(
+              100,
+              Math.round((ctxhDays / ctxhTarget) * 100),
+            );
+            const isKltnReady = ctxhDays >= ctxhKltnMilestone;
+            const isGradReady = ctxhDays >= ctxhTarget;
+
+            return (
+              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={cn(
+                        "flex h-8 w-8 items-center justify-center rounded-lg",
+                        isGradReady
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-indigo-100 text-indigo-700",
+                      )}
+                    >
+                      <HeartHandshake className="h-4 w-4" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-900">
+                      3. Trụ cột Xã hội (CTXH)
+                    </span>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[10px] font-semibold",
+                      isGradReady
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : isKltnReady
+                          ? "border-blue-200 bg-blue-50 text-blue-700"
+                          : "border-amber-200 bg-amber-50 text-amber-800",
+                    )}
+                  >
+                    {isGradReady
+                      ? "Đủ tốt nghiệp"
+                      : isKltnReady
+                        ? "Đủ đk KLTN"
+                        : `Thiếu ${ctxhKltnMilestone - ctxhDays} ngày KLTN`}
+                  </Badge>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-baseline justify-between text-xs">
+                    <span className="text-slate-600">Ngày CTXH tích lũy</span>
+                    <span className="font-mono font-bold text-slate-900">
+                      {ctxhDays} / {ctxhTarget} ngày
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <Progress
+                      value={ctxhPercent}
+                      className="h-2 bg-slate-200 **:data-[slot=progress-indicator]:bg-indigo-600"
+                    />
+                    <div
+                      title="Mốc 12 ngày: đủ điều kiện làm KLTN"
+                      className="absolute top-0 bottom-0 left-[80%] w-0.5 bg-amber-500"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Mốc <strong>12 ngày</strong>: đăng ký KLTN • Mốc{" "}
+                    <strong>15 ngày</strong>: xét tốt nghiệp
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+        </CardContent>
+      </Card>
 
       {/* 3. Academic Insights (Middle Row - 2 Columns CSS Grid) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

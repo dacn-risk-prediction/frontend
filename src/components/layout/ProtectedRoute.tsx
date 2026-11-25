@@ -2,15 +2,23 @@ import { Navigate, Outlet, useLocation } from "react-router-dom"
 import { useAuthUser, ROLE_DEFAULT_REDIRECT } from "@/features/auth"
 import type { UserRole } from "@/types"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
 
 interface ProtectedRouteProps {
   allowedRoles?: UserRole[]
 }
 
+function getHttpStatus(error: unknown): number | undefined {
+  if (typeof error === "object" && error !== null && "response" in error) {
+    return (error as { response?: { status?: number } }).response?.status
+  }
+  return undefined
+}
+
 export const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
   const location = useLocation()
   const hasToken = Boolean(localStorage.getItem("access_token"))
-  const { data: user, isLoading, isError } = useAuthUser()
+  const { data: user, isLoading, isError, error, refetch } = useAuthUser()
 
   if (!hasToken) {
     return <Navigate to="/login" state={{ from: location }} replace />
@@ -27,9 +35,31 @@ export const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
     )
   }
 
-  if (isError || !user || user.is_active === false) {
-    localStorage.removeItem("access_token")
-    localStorage.removeItem("refresh_token")
+  if (isError) {
+    const status = getHttpStatus(error)
+    if (status === 401 || status === 403) {
+      return <Navigate to="/login" state={{ from: location }} replace />
+    }
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-3 bg-slate-50 p-6 text-center">
+        <h2 className="text-base font-bold text-slate-900">
+          Không thể kết nối máy chủ xác thực
+        </h2>
+        <p className="max-w-sm text-xs text-slate-600">
+          Vui lòng kiểm tra kết nối mạng hoặc thử tải lại phiên đăng nhập.
+        </p>
+        <Button
+          size="sm"
+          onClick={() => void refetch()}
+          className="cursor-pointer bg-blue-600 text-xs text-white hover:bg-blue-700"
+        >
+          Thử lại
+        </Button>
+      </div>
+    )
+  }
+
+  if (!user || user.is_active === false) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
@@ -54,4 +84,3 @@ export const GuestRoute = () => {
 
   return <Outlet />
 }
-

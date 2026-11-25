@@ -270,7 +270,8 @@ export const PedagogicalAdviceCard = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const adviseMutation = useAdviseCourseWithAI()
-  const adviceKey = `${studentId ?? ""}::${courseCode}::${semesterCode}::${targetGoal}`
+  const serializedWhatIf = whatIfMarks ? JSON.stringify(whatIfMarks) : ""
+  const adviceKey = `${studentId ?? ""}::${courseCode}::${semesterCode}::${targetGoal}::${serializedWhatIf}`
   const activeAdvice = adviceByKey[adviceKey] ?? null
 
   const handleRequestAiAdvice = async (forceRefresh: boolean) => {

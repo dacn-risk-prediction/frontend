@@ -195,10 +195,10 @@ export const useUnreadAdvisingCount = (enabled: boolean = true) => {
   return useQuery({
     queryKey: advisingKeys.unreadCount(),
     queryFn: getUnreadAdvisingCount,
-    refetchInterval: 4000,
-    refetchIntervalInBackground: true,
-    refetchOnWindowFocus: "always",
-    staleTime: 0,
+    refetchInterval: 15000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    staleTime: 5000,
     enabled,
     retry: false,
   });
@@ -212,10 +212,10 @@ export const useAdvisingNotifications = (
   return useQuery({
     queryKey: advisingKeys.notifications(direction, limit),
     queryFn: () => getAdvisingNotifications(direction, limit, 0),
-    refetchInterval: 4000,
-    refetchIntervalInBackground: true,
-    refetchOnWindowFocus: "always",
-    staleTime: 0,
+    refetchInterval: enabled ? 15000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    staleTime: 5000,
     enabled,
     retry: false,
   });
@@ -225,8 +225,10 @@ export const useMarkSessionRead = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: markSessionAsRead,
-    onSuccess: (_data, sessionId) => {
-      queryClient.invalidateQueries({ queryKey: advisingKeys.unreadCount() });
+    onSuccess: (data, sessionId) => {
+      queryClient.setQueryData<UnreadCountResponse>(advisingKeys.unreadCount(), {
+        unread_count: data.unread_count,
+      });
       queryClient.invalidateQueries({ queryKey: advisingKeys.sessions() });
       queryClient.invalidateQueries({ queryKey: advisingKeys.session(sessionId) });
       queryClient.invalidateQueries({ queryKey: advisingKeys.messages(sessionId) });
@@ -239,8 +241,10 @@ export const useMarkAllNotificationsRead = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: markAllNotificationsAsRead,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: advisingKeys.unreadCount() });
+    onSuccess: (data) => {
+      queryClient.setQueryData<UnreadCountResponse>(advisingKeys.unreadCount(), {
+        unread_count: data.unread_count,
+      });
       queryClient.invalidateQueries({ queryKey: advisingKeys.sessions() });
       queryClient.invalidateQueries({ queryKey: advisingKeys.notificationsAll() });
     },
@@ -251,10 +255,10 @@ export const useAdvisingSessions = (enabled: boolean = true) => {
   return useQuery({
     queryKey: advisingKeys.sessions(),
     queryFn: listAdvisingSessions,
-    refetchInterval: 4000,
-    refetchIntervalInBackground: true,
-    refetchOnWindowFocus: "always",
-    staleTime: 0,
+    refetchInterval: 20000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    staleTime: 5000,
     enabled,
     retry: false,
   });

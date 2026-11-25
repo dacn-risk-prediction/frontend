@@ -88,6 +88,9 @@ apiClient.interceptors.response.use(
       const refreshToken = localStorage.getItem("refresh_token")
 
       if (!refreshToken) {
+        localStorage.removeItem("access_token")
+        delete apiClient.defaults.headers.common["Authorization"]
+        processQueue(error, null)
         isRefreshing = false
         if (window.location.pathname !== "/login") {
           window.location.href = "/login"

@@ -75,6 +75,8 @@ export interface AdvisingAppointment {
   meeting_type: "OFFICE" | "ONLINE";
   location: string;
   notes?: string | null;
+  created_by_id?: string | null;
+  created_by_role?: "student" | "lecturer" | "admin" | string | null;
   status: AppointmentStatus;
   created_at: string;
   updated_at: string;

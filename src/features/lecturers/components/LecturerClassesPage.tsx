@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { flexRender, type SortingState } from "@tanstack/react-table";
 import {
   getCoreRowModel,
@@ -107,6 +107,8 @@ const GRADE_COLORS: Record<string, string> = {
 
 export const LecturerClassesPage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const classIdParam = searchParams.get("classId");
   const { data: user } = useAuthUser();
   const lecturerId = user?.user_code || user?.id;
 
@@ -120,8 +122,25 @@ export const LecturerClassesPage = () => {
   const { data: activeSemester } = useActiveSemester();
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedClass, setSelectedClass] =
+  const [manualSelectedClass, setManualSelectedClass] =
     useState<LecturerCurrentClassItem | null>(null);
+  const selectedClass = useMemo(() => {
+    if (manualSelectedClass) return manualSelectedClass;
+    if (classIdParam) {
+      return classes.find((c) => c.class_id === classIdParam) ?? null;
+    }
+    return null;
+  }, [manualSelectedClass, classIdParam, classes]);
+
+  const setSelectedClass = (cls: LecturerCurrentClassItem | null) => {
+    setManualSelectedClass(cls);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (cls) next.set("classId", cls.class_id);
+      else next.delete("classId");
+      return next;
+    });
+  };
   const [modalTab, setModalTab] = useState<ClassModalTab>("xai");
 
   // Filter & sort within class modal
@@ -231,24 +250,20 @@ export const LecturerClassesPage = () => {
     });
   }, [selectedClass, roster, classPrediction]);
 
-  // Filter students within modal
+  // Filter students within Tab 1 (AI Risk) — mutually exclusive HIGH / MEDIUM / LOW groups
   const filteredStudents = useMemo(() => {
     return enrichedStudents.filter((student) => {
-      if (
-        riskFilter === "HIGH" &&
-        student.risk_level !== "HIGH" &&
-        !student.is_at_risk
-      ) {
+      const isHigh = student.risk_level === "HIGH" || student.is_at_risk;
+      const isMedium = !isHigh && student.risk_level === "MEDIUM";
+      const isLow = !isHigh && student.risk_level === "LOW";
+
+      if (riskFilter === "HIGH" && !isHigh) {
         return false;
       }
-      if (riskFilter === "MEDIUM" && student.risk_level !== "MEDIUM") {
+      if (riskFilter === "MEDIUM" && !isMedium) {
         return false;
       }
-      if (
-        riskFilter === "LOW" &&
-        student.risk_level !== "LOW" &&
-        student.is_at_risk
-      ) {
+      if (riskFilter === "LOW" && !isLow) {
         return false;
       }
       if (classStudentSearch.trim()) {
@@ -261,17 +276,31 @@ export const LecturerClassesPage = () => {
     });
   }, [enrichedStudents, riskFilter, classStudentSearch]);
 
-  // Counts for tabs
+  // Tab 2 (Grade Roster) filters only by search query, independent of Tab 1's risk filter
+  const gradeRosterStudents = useMemo(() => {
+    if (!classStudentSearch.trim()) return enrichedStudents;
+    const query = classStudentSearch.toLowerCase().trim();
+    return enrichedStudents.filter(
+      (student) =>
+        student.student_id.toLowerCase().includes(query) ||
+        student.student_name.toLowerCase().includes(query),
+    );
+  }, [enrichedStudents, classStudentSearch]);
+
+  // Mutually exclusive counts for tabs
   const riskCounts = useMemo(() => {
-    const high = enrichedStudents.filter(
-      (s) => s.risk_level === "HIGH" || s.is_at_risk,
-    ).length;
-    const medium = enrichedStudents.filter(
-      (s) => s.risk_level === "MEDIUM",
-    ).length;
-    const low = enrichedStudents.filter(
-      (s) => s.risk_level === "LOW" && !s.is_at_risk,
-    ).length;
+    let high = 0;
+    let medium = 0;
+    let low = 0;
+    for (const s of enrichedStudents) {
+      if (s.risk_level === "HIGH" || s.is_at_risk) {
+        high += 1;
+      } else if (s.risk_level === "MEDIUM") {
+        medium += 1;
+      } else {
+        low += 1;
+      }
+    }
     return {
       all: enrichedStudents.length,
       high,
@@ -1265,7 +1294,7 @@ export const LecturerClassesPage = () => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {filteredStudents.map((student) => (
+                          {gradeRosterStudents.map((student) => (
                             <tr
                               key={student.student_id}
                               className="hover:bg-slate-50/80 transition-colors"

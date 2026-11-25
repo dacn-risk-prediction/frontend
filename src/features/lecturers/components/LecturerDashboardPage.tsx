@@ -666,7 +666,11 @@ export const LecturerDashboardPage = () => {
                         variant="ghost"
                         size="sm"
                         className="h-8 px-2 text-blue-700 hover:bg-blue-50 cursor-pointer"
-                        onClick={() => navigate("/lecturer/classes")}
+                        onClick={() =>
+                          navigate(
+                            `/lecturer/classes?classId=${encodeURIComponent(cls.class_id)}`,
+                          )
+                        }
                       >
                         <ArrowRight className="h-4 w-4" />
                       </Button>

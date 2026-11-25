@@ -1,12 +1,16 @@
-import { useMutation, useQueries, useQuery } from "@tanstack/react-query"
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiClient } from "@/lib/api-client"
+import { AUTH_QUERY_KEY } from "@/features/auth"
 import type {
   Course,
   CourseAdviseAIRequest,
   CourseAdviseAIResponse,
   CourseAssessment,
   CourseCounterfactualResponse,
+  CourseDetail,
   CoursePredictionResponse,
+  Curriculum,
+  CurriculumDetail,
   Enrollment,
   PredictCourseCounterfactualRequest,
   PredictCourseRequest,
@@ -15,6 +19,8 @@ import type {
   StudentDetail,
   StudentPredictionResponse,
   TargetGoal,
+  User,
+  UserUpdatePayload,
 } from "@/types"
 
 export type {
@@ -451,6 +457,70 @@ export const useStudentCourseAssessments = (courseCodes: string[]) => {
       staleTime: 30 * 60 * 1000,
       retry: false,
     })),
+  })
+}
+
+export const useCurriculums = (cohort?: string) => {
+  return useQuery({
+    queryKey: ["curriculums", cohort ?? "all"] as const,
+    queryFn: async (): Promise<Curriculum[]> => {
+      const response = await apiClient.get<Curriculum[]>("/curriculums/", {
+        params: { limit: 200, ...(cohort ? { cohort } : {}) },
+      })
+      return response.data
+    },
+    staleTime: 30 * 60 * 1000,
+  })
+}
+
+export const useCurriculumDetail = (curriculumId?: string) => {
+  return useQuery({
+    queryKey: ["curriculums", curriculumId, "detail"] as const,
+    queryFn: async (): Promise<CurriculumDetail> => {
+      const response = await apiClient.get<CurriculumDetail>(
+        `/curriculums/${encodeURIComponent(curriculumId!)}`
+      )
+      return response.data
+    },
+    enabled: Boolean(curriculumId),
+    staleTime: 30 * 60 * 1000,
+  })
+}
+
+export const useCourseDetail = (courseCode?: string) => {
+  return useQuery({
+    queryKey: ["courses", courseCode, "detail"] as const,
+    queryFn: async (): Promise<CourseDetail | null> => {
+      try {
+        const response = await apiClient.get<CourseDetail>(
+          `/courses/${encodeURIComponent(courseCode!)}`
+        )
+        return response.data
+      } catch {
+        return null
+      }
+    },
+    enabled: Boolean(courseCode),
+    staleTime: 30 * 60 * 1000,
+  })
+}
+
+export const useUpdateStudentAccount = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      payload,
+    }: {
+      userId: string
+      payload: UserUpdatePayload
+    }): Promise<User> => {
+      const response = await apiClient.put<User>(`/users/${userId}`, payload)
+      return response.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEY })
+    },
   })
 }
 

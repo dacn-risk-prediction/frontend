@@ -293,7 +293,7 @@ export const StudentWhatIfPage = () => {
     useStudentCurrentCourses(studentId);
   const { data: enrollments } = useStudentEnrollments(studentId);
   const { data: predictions, isLoading: isLoadingPredictions } =
-    useStudentPredictions(studentId);
+    useStudentPredictions(studentId, activeSemesterCode);
 
   // Exclude exempted courses (final_score === 12) so only active studied courses are simulated
   const currentCourses = useMemo(() => {
@@ -424,12 +424,12 @@ export const StudentWhatIfPage = () => {
         pred?.risk_level === "HIGH" ||
         pred?.risk_level === "MEDIUM" ||
         pred?.is_at_risk ||
-        (pred?.predicted_score10 ?? 7.0) < 5.0;
+        (pred?.predicted_score10 ?? 7.0) < 4.0;
 
       if (isAtRisk) {
         const req = Math.max(
           3.0,
-          Math.min(10.0, Number(((5.0 - proc * procW) / finalW).toFixed(1))),
+          Math.min(10.0, Number(((4.0 - proc * procW) / finalW).toFixed(1))),
         );
         updated[course.course_code] = req;
       } else {
@@ -603,7 +603,7 @@ export const StudentWhatIfPage = () => {
         gpa4 = score10ToGpa4(totalScore10);
         letter = score10ToLetter(totalScore10);
 
-        if (totalScore10 < 5.0) {
+        if (totalScore10 < 4.0) {
           simRiskCount += 1;
         }
       }
@@ -620,7 +620,7 @@ export const StudentWhatIfPage = () => {
         gpa4,
         letter,
         isDisqualified,
-        isAtRisk: isDisqualified || totalScore10 < 5.0,
+        isAtRisk: isDisqualified || totalScore10 < 4.0,
       });
     }
 
@@ -628,7 +628,7 @@ export const StudentWhatIfPage = () => {
     const termDelta = Number((simTermGpa - baselineGpa).toFixed(2));
 
     const passedCredits = summary?.total_passed_credits ?? 0;
-    const curCumGpa = summary?.cumulative_gpa ?? 3.0;
+    const curCumGpa = summary?.cumulative_gpa ?? 0;
     const pastGradePoints = curCumGpa * passedCredits;
 
     const projCumGpa =
@@ -1207,7 +1207,7 @@ export const StudentWhatIfPage = () => {
                                     ? "border-emerald-300 bg-emerald-50 text-emerald-700"
                                     : totalScore10 >= 7.0
                                       ? "border-blue-300 bg-blue-50 text-blue-700"
-                                      : totalScore10 >= 5.0
+                                      : totalScore10 >= 4.0
                                         ? "border-slate-300 bg-white text-slate-800"
                                         : "border-rose-300 bg-rose-50 text-rose-700"
                                 )}
@@ -1248,7 +1248,7 @@ export const StudentWhatIfPage = () => {
                             <div className="flex justify-between text-[9px] text-slate-400 mt-0.5">
                               <span>0 (Liệt)</span>
                               <span className="text-amber-600 font-semibold">3.0 (Chặn liệt)</span>
-                              <span>5.0 (Qua môn)</span>
+                              <span>4.0 (Qua môn)</span>
                               <span>7.0 (Khá)</span>
                               <span>8.5 (Giỏi)</span>
                               <span>10</span>
@@ -1614,9 +1614,9 @@ export const StudentWhatIfPage = () => {
                         Cảnh báo: Có {disqualifiedCount} môn đang bị điểm liệt cuối kỳ (&lt; 3.0). Cần điều chỉnh điểm thi cuối kỳ ngay!
                       </span>
                     ) : simulatedAtRiskCount === 0 ? (
-                      "Tất cả các môn đều đạt trên ngưỡng an toàn (≥ 5.0) và không bị điểm liệt. Nguy cơ rớt học kỳ được triệt tiêu hoàn toàn."
+                      "Tất cả các môn đều đạt trên ngưỡng qua môn (≥ 4.0) và không bị điểm liệt. Nguy cơ rớt học kỳ được triệt tiêu hoàn toàn."
                     ) : (
-                      `Hiện có ${simulatedAtRiskCount} môn đang dưới 5.0 hoặc có nguy cơ. Hãy tập trung ưu tiên cho các môn này khi ôn thi.`
+                      `Hiện có ${simulatedAtRiskCount} môn đang dưới 4.0 hoặc có nguy cơ. Hãy tập trung ưu tiên cho các môn này khi ôn thi.`
                     )}
                   </p>
                 </div>
