@@ -1,8 +1,15 @@
-import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom"
+import { createBrowserRouter, Link, Navigate, RouterProvider } from "react-router-dom"
 import { ProtectedRoute, GuestRoute } from "@/components/layout/ProtectedRoute"
 import { StudentLayout } from "@/components/layout/StudentLayout"
 import { LecturerLayout } from "@/components/layout/LecturerLayout"
+import { AdminLayout } from "@/components/layout/AdminLayout"
 import { LoginForm, useAuthUser, ROLE_DEFAULT_REDIRECT } from "@/features/auth"
+import {
+  AdminDashboardPage,
+  AdminUsersPage,
+  AdminSemestersPage,
+  AdminAcademicsPage,
+} from "@/features/admin"
 import {
   StudentOverviewPage,
   StudentAcademicRecordPage,
@@ -45,15 +52,36 @@ const appRouter = createBrowserRouter([
     element: <ProtectedRoute allowedRoles={["admin"]} />,
     children: [
       {
-        path: "dashboard",
-        element: <div className="p-6 font-medium">Admin System Overview & User Management</div>,
+        element: <AdminLayout />,
+        children: [
+          {
+            index: true,
+            element: <Navigate to="/admin/dashboard" replace />,
+          },
+          {
+            path: "dashboard",
+            element: <AdminDashboardPage />,
+          },
+          {
+            path: "users",
+            element: <AdminUsersPage />,
+          },
+          {
+            path: "semesters",
+            element: <AdminSemestersPage />,
+          },
+          {
+            path: "academics",
+            element: <AdminAcademicsPage />,
+          },
+        ],
       },
     ],
   },
   // Lecturer Role Routes
   {
     path: "/lecturer",
-    element: <ProtectedRoute allowedRoles={["lecturer", "admin"]} />,
+    element: <ProtectedRoute allowedRoles={["lecturer"]} />,
     children: [
       {
         element: <LecturerLayout />,
@@ -141,14 +169,18 @@ const appRouter = createBrowserRouter([
         <p className="max-w-md text-sm text-muted-foreground">
           You do not have the required permissions to access this institutional resource.
         </p>
-        <a
-          href="/login"
+        <Link
+          to="/"
           className="inline-flex items-center justify-center rounded-lg bg-brand-blue px-4 py-2 text-sm font-medium text-white shadow hover:bg-brand-blue-hover transition-colors"
         >
           Return to Portal
-        </a>
+        </Link>
       </div>
     ),
+  },
+  {
+    path: "*",
+    element: <Navigate to="/" replace />,
   },
 ])
 
