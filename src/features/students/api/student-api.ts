@@ -1,21 +1,33 @@
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQueries, useQuery } from "@tanstack/react-query"
 import { apiClient } from "@/lib/api-client"
 import type {
   Course,
+  CourseAdviseAIRequest,
+  CourseAdviseAIResponse,
+  CourseAssessment,
+  CourseCounterfactualResponse,
   CoursePredictionResponse,
   Enrollment,
+  PredictCourseCounterfactualRequest,
   PredictCourseRequest,
   StudentAcademicSummary,
   StudentCurrentCourseItem,
   StudentDetail,
   StudentPredictionResponse,
+  TargetGoal,
 } from "@/types"
 
 export type {
+  CourseAdviseAIRequest,
+  CourseAdviseAIResponse,
+  CourseAssessment,
+  CourseCounterfactualResponse,
   CoursePredictionResponse,
+  PredictCourseCounterfactualRequest,
   StudentCurrentCourseItem,
   StudentHK261CourseItem,
   StudentPredictionResponse,
+  TargetGoal,
 } from "@/types"
 
 export const STUDENT_SUMMARY_QUERY_KEY = (studentId?: string) =>
@@ -47,6 +59,24 @@ export const COURSE_PREDICTION_QUERY_KEY = (
   courseCode?: string,
   semesterCode?: string
 ) => ["predictions", "course", studentId, courseCode, semesterCode] as const
+
+export const COURSE_COUNTERFACTUAL_QUERY_KEY = (
+  studentId?: string,
+  courseCode?: string,
+  semesterCode?: string,
+  targetGoal: TargetGoal = "PASS"
+) =>
+  [
+    "predictions",
+    "course-counterfactual",
+    studentId,
+    courseCode,
+    semesterCode,
+    targetGoal,
+  ] as const
+
+export const STUDENT_COURSE_ASSESSMENT_QUERY_KEY = (courseCode?: string) =>
+  ["courses", courseCode, "assessment"] as const
 
 export const getStudentSummary = async (
   studentId: string
@@ -198,6 +228,72 @@ export const getCoursePrediction = async (
   }
 }
 
+/**
+ * Compute constrained counterfactual recourse plans & 13-scenario pedagogical advice
+ * POST /api/v1/predictions/course/counterfactual
+ */
+export const getCourseCounterfactual = async (
+  payload: PredictCourseCounterfactualRequest
+): Promise<CourseCounterfactualResponse | null> => {
+  try {
+    const response = await apiClient.post<CourseCounterfactualResponse>(
+      "/predictions/course/counterfactual",
+      payload
+    )
+    return response.data
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error &&
+      ((error as { response?: { status?: number } }).response?.status === 404 ||
+        (error as { response?: { status?: number } }).response?.status === 503)
+    ) {
+      return null
+    }
+    throw error
+  }
+}
+
+/**
+ * Generate on-demand grounded natural-language AI advice with cache & fallback
+ * POST /api/v1/predictions/course/advise-ai
+ */
+export const adviseCourseWithAI = async (
+  payload: CourseAdviseAIRequest
+): Promise<CourseAdviseAIResponse> => {
+  const response = await apiClient.post<CourseAdviseAIResponse>(
+    "/predictions/course/advise-ai",
+    payload
+  )
+  return response.data
+}
+
+/**
+ * Fetch course grading weights breakdown
+ * GET /api/v1/courses/{course_code}/assessment
+ */
+export const getStudentCourseAssessment = async (
+  courseCode: string
+): Promise<CourseAssessment | null> => {
+  try {
+    const response = await apiClient.get<CourseAssessment>(
+      `/courses/${courseCode}/assessment`
+    )
+    return response.data
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error &&
+      (error as { response?: { status?: number } }).response?.status === 404
+    ) {
+      return null
+    }
+    throw error
+  }
+}
+
 export const useStudentSummary = (studentId?: string) => {
   return useQuery({
     queryKey: STUDENT_SUMMARY_QUERY_KEY(studentId),
@@ -269,7 +365,8 @@ export const useStudentPredictions = (
 export const useCoursePrediction = (
   studentId?: string,
   courseCode?: string,
-  semesterCode?: string
+  semesterCode?: string,
+  options?: { enabled?: boolean }
 ) => {
   return useQuery({
     queryKey: COURSE_PREDICTION_QUERY_KEY(studentId, courseCode, semesterCode),
@@ -279,8 +376,81 @@ export const useCoursePrediction = (
         course_code: courseCode!,
         semester_code: semesterCode,
       }),
-    enabled: Boolean(studentId && courseCode),
+    enabled: Boolean(studentId && courseCode) && (options?.enabled ?? true),
     staleTime: 5 * 60 * 1000,
+  })
+}
+
+/**
+ * Hook to compute constrained counterfactual recourse & pedagogical advice for a course
+ */
+export const useCourseCounterfactual = (
+  studentId?: string,
+  courseCode?: string,
+  semesterCode?: string,
+  targetGoal: TargetGoal = "PASS",
+  options?: {
+    enabled?: boolean
+    whatIfMarks?: Record<string, number | null> | null
+    allowImproveRecordedProcess?: boolean
+    lockedComponents?: string[] | null
+  }
+) => {
+  const whatIfMarks = options?.whatIfMarks ?? null
+  return useQuery({
+    queryKey: whatIfMarks
+      ? [
+          ...COURSE_COUNTERFACTUAL_QUERY_KEY(
+            studentId,
+            courseCode,
+            semesterCode,
+            targetGoal
+          ),
+          whatIfMarks,
+        ]
+      : COURSE_COUNTERFACTUAL_QUERY_KEY(
+          studentId,
+          courseCode,
+          semesterCode,
+          targetGoal
+        ),
+    queryFn: () =>
+      getCourseCounterfactual({
+        student_id: studentId!,
+        course_code: courseCode!,
+        semester_code: semesterCode,
+        target_goal: targetGoal,
+        locked_components: options?.lockedComponents ?? null,
+        allow_improve_recorded_process:
+          options?.allowImproveRecordedProcess ?? true,
+        what_if_marks: whatIfMarks,
+      }),
+    enabled: Boolean(studentId && courseCode) && (options?.enabled ?? true),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  })
+}
+
+/**
+ * On-demand mutation for grounded natural-language Gemini AI advice
+ */
+export const useAdviseCourseWithAI = () => {
+  return useMutation({
+    mutationFn: (payload: CourseAdviseAIRequest) => adviseCourseWithAI(payload),
+  })
+}
+
+/**
+ * Batch-fetch grading weights breakdown for multiple courses (used in What-If simulator)
+ */
+export const useStudentCourseAssessments = (courseCodes: string[]) => {
+  return useQueries({
+    queries: courseCodes.map((code) => ({
+      queryKey: STUDENT_COURSE_ASSESSMENT_QUERY_KEY(code),
+      queryFn: () => getStudentCourseAssessment(code),
+      staleTime: 30 * 60 * 1000,
+      retry: false,
+    })),
   })
 }
 

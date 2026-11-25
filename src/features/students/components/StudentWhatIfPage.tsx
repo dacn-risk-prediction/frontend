@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
+  AlertTriangle,
   ArrowRight,
   BookOpen,
   GraduationCap,
@@ -31,41 +32,139 @@ import { useActiveSemester, formatSemesterLabel } from "@/hooks/use-active-semes
 import { score10ToGpa4, score10ToLetter } from "@/lib/grade-scale";
 import { formatFeatureName } from "@/lib/shap-features";
 import { cn } from "@/lib/utils";
-import type { CoursePredictionResponse } from "@/types";
+import type {
+  CourseAssessment,
+  CoursePredictionResponse,
+  TargetGoal,
+} from "@/types";
 import {
+  useCourseCounterfactual,
+  useStudentCourseAssessments,
   useStudentCurrentCourses,
   useStudentEnrollments,
   useStudentPredictions,
   useStudentSummary,
 } from "../api/student-api";
 
+type ProcessComponentKey = "quiz" | "lab" | "btl" | "giua_ky";
+
+interface ResolvedWeights {
+  finalWeight: number;
+  processWeight: number;
+  componentWeights: Record<ProcessComponentKey, number>;
+  hasRealWeights: boolean;
+}
+
+function resolveCourseWeights(assessment?: CourseAssessment | null): ResolvedWeights {
+  if (!assessment) {
+    return {
+      finalWeight: 0.5,
+      processWeight: 0.5,
+      componentWeights: { quiz: 0, lab: 0, btl: 0, giua_ky: 0 },
+      hasRealWeights: false,
+    };
+  }
+
+  const normalize = (v: number | null | undefined): number => {
+    if (v === null || v === undefined || Number.isNaN(v) || v <= 0) return 0;
+    return v > 1 ? v / 100 : v;
+  };
+
+  const quiz = normalize(assessment.quiz);
+  const lab = normalize(assessment.lab);
+  const btl = normalize(assessment.btl);
+  const giua_ky = normalize(assessment.giua_ky);
+  const cuoi_ky = normalize(assessment.cuoi_ky);
+  const total = quiz + lab + btl + giua_ky + cuoi_ky;
+
+  if (total <= 0 || cuoi_ky <= 0) {
+    return {
+      finalWeight: 0.5,
+      processWeight: 0.5,
+      componentWeights: { quiz: 0, lab: 0, btl: 0, giua_ky: 0 },
+      hasRealWeights: false,
+    };
+  }
+
+  const finalWeight = cuoi_ky / total;
+  const processWeight = 1 - finalWeight;
+
+  return {
+    finalWeight,
+    processWeight,
+    componentWeights: {
+      quiz: quiz / total,
+      lab: lab / total,
+      btl: btl / total,
+      giua_ky: giua_ky / total,
+    },
+    hasRealWeights: true,
+  };
+}
+
 /**
- * Extract in-term process score from LMS current_marks or model baseline
+ * Extract in-term process score from LMS current_marks, simulated overrides, or model baseline
  */
-function getProcessScore(pred?: CoursePredictionResponse): {
+function getProcessScore(
+  pred?: CoursePredictionResponse,
+  overrideMarks?: Partial<Record<ProcessComponentKey, number>>,
+  resolvedWeights?: ResolvedWeights
+): {
   score: number;
   isRecorded: boolean;
   marksSummary: string;
 } {
-  const marks = pred?.current_marks;
-  if (marks && Object.keys(marks).length > 0) {
-    const gk = marks.giua_ky ?? null;
-    const btl = marks.btl ?? null;
-    const lab = marks.lab ?? null;
-    const quiz = marks.quiz ?? null;
+  const baseMarks = pred?.current_marks ?? {};
+  const gk = overrideMarks?.giua_ky ?? baseMarks.giua_ky ?? null;
+  const btl = overrideMarks?.btl ?? baseMarks.btl ?? null;
+  const lab = overrideMarks?.lab ?? baseMarks.lab ?? null;
+  const quiz = overrideMarks?.quiz ?? baseMarks.quiz ?? null;
 
-    const others = [btl, lab, quiz].filter((v): v is number => v !== null && v !== undefined);
-    const otherAvg = others.length > 0 ? others.reduce((a, b) => a + b, 0) / others.length : null;
+  const hasAnyMark = [gk, btl, lab, quiz].some(
+    (v) => v !== null && v !== undefined
+  );
 
-    let score: number;
-    if (gk !== null && otherAvg !== null) {
-      score = gk * 0.6 + otherAvg * 0.4;
-    } else if (gk !== null) {
-      score = gk;
-    } else if (otherAvg !== null) {
-      score = otherAvg;
-    } else {
-      score = pred?.predicted_score10 ?? 6.5;
+  if (hasAnyMark) {
+    let score: number | null = null;
+
+    if (resolvedWeights?.hasRealWeights && resolvedWeights.processWeight > 0) {
+      const pairs: Array<[number | null, number]> = [
+        [quiz, resolvedWeights.componentWeights.quiz],
+        [lab, resolvedWeights.componentWeights.lab],
+        [btl, resolvedWeights.componentWeights.btl],
+        [gk, resolvedWeights.componentWeights.giua_ky],
+      ];
+      let weightedSum = 0;
+      let availableWeight = 0;
+      for (const [mark, weight] of pairs) {
+        if (mark !== null && mark !== undefined && weight > 0) {
+          weightedSum += Number(mark) * weight;
+          availableWeight += weight;
+        }
+      }
+      if (availableWeight > 0) {
+        score = weightedSum / availableWeight;
+      }
+    }
+
+    if (score === null) {
+      const others = [btl, lab, quiz].filter(
+        (v): v is number => v !== null && v !== undefined
+      );
+      const otherAvg =
+        others.length > 0
+          ? others.reduce((a, b) => a + b, 0) / others.length
+          : null;
+
+      if (gk !== null && otherAvg !== null) {
+        score = gk * 0.6 + otherAvg * 0.4;
+      } else if (gk !== null) {
+        score = gk;
+      } else if (otherAvg !== null) {
+        score = otherAvg;
+      } else {
+        score = pred?.predicted_score10 ?? 6.5;
+      }
     }
 
     const parts: string[] = [];
@@ -76,12 +175,14 @@ function getProcessScore(pred?: CoursePredictionResponse): {
 
     return {
       score: Number(score.toFixed(1)),
-      isRecorded: parts.length > 0,
-      marksSummary: parts.length > 0 ? parts.join(" • ") : "Chưa có điểm LMS",
+      isRecorded: true,
+      marksSummary: parts.join(" • "),
     };
   }
 
-  const fallback = pred?.predicted_score10 ? Math.min(10, Math.max(0, pred.predicted_score10)) : 6.5;
+  const fallback = pred?.predicted_score10
+    ? Math.min(10, Math.max(0, pred.predicted_score10))
+    : 6.5;
   return {
     score: Number(fallback.toFixed(1)),
     isRecorded: false,
@@ -145,7 +246,45 @@ export const StudentWhatIfPage = () => {
   const { data: user } = useAuthUser();
   const studentId = user?.user_code || user?.id;
   const { data: activeSemester } = useActiveSemester();
-  const activeSemesterLabel = formatSemesterLabel(activeSemester?.semester_code);
+  const activeSemesterCode = activeSemester?.semester_code || "HK261";
+  const activeSemesterLabel = formatSemesterLabel(activeSemesterCode);
+
+  const targetFinalParam = useMemo(() => {
+    const raw = searchParams.get("targetFinal");
+    if (!raw) return null;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 10) return null;
+    return Number(parsed.toFixed(1));
+  }, [searchParams]);
+
+  const targetGoalParam = useMemo<TargetGoal>(() => {
+    const raw = searchParams.get("targetGoal");
+    if (
+      raw === "PASS" ||
+      raw === "GRADE_C" ||
+      raw === "GRADE_B" ||
+      raw === "GRADE_A"
+    ) {
+      return raw;
+    }
+    return "PASS";
+  }, [searchParams]);
+
+  const preselectedProcessOverrides = useMemo<
+    Partial<Record<ProcessComponentKey, number>>
+  >(() => {
+    const result: Partial<Record<ProcessComponentKey, number>> = {};
+    for (const key of ["quiz", "lab", "btl", "giua_ky"] as const) {
+      const raw = searchParams.get(key);
+      if (raw !== null) {
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 10) {
+          result[key] = Number(parsed.toFixed(1));
+        }
+      }
+    }
+    return result;
+  }, [searchParams]);
 
   // Real academic data queries
   const { data: summary, isLoading: isLoadingSummary } =
@@ -180,6 +319,20 @@ export const StudentWhatIfPage = () => {
     );
   }, [rawCurrentCourses, enrollments]);
 
+  // Fetch real course assessment weights for all active courses
+  const courseCodes = useMemo(
+    () => (currentCourses ?? []).map((c) => c.course_code),
+    [currentCourses],
+  );
+  const assessmentQueries = useStudentCourseAssessments(courseCodes);
+  const courseWeightsMap = useMemo(() => {
+    const map = new Map<string, ResolvedWeights>();
+    courseCodes.forEach((code, idx) => {
+      map.set(code, resolveCourseWeights(assessmentQueries[idx]?.data));
+    });
+    return map;
+  }, [courseCodes, assessmentQueries]);
+
   // Map AI predictions by course_code
   const predictionMap = useMemo(() => {
     const map = new Map<string, CoursePredictionResponse>();
@@ -213,9 +366,14 @@ export const StudentWhatIfPage = () => {
     return "";
   }, [selectedCourseCode, preselectedCourse, currentCourses, predictionMap]);
 
-  // ⭐ CẢI TIẾN 1: Interactive simulated overrides for FINAL EXAM SCORES (0 - 10)
-  // course_code -> expected final exam score
+  // Interactive simulated overrides for FINAL EXAM SCORES & PROCESS MARKS (0 - 10)
   const [userFinalExamScores, setUserFinalExamScores] = useState<Record<string, number>>({});
+  const [userProcessMarks, setUserProcessMarks] = useState<
+    Record<string, Partial<Record<ProcessComponentKey, number>>>
+  >({});
+  const [manualAiCheckCourse, setManualAiCheckCourse] = useState<string | null>(
+    null,
+  );
 
   const handleFinalExamChange = (courseCode: string, newScore: number) => {
     setUserFinalExamScores((prev) => ({
@@ -224,15 +382,44 @@ export const StudentWhatIfPage = () => {
     }));
   };
 
-  // ⭐ CẢI TIẾN 2: 3 Kịch bản Thông minh (Smart Presets) sát thực tế
+  const handleProcessMarkChange = (
+    courseCode: string,
+    component: ProcessComponentKey,
+    newScore: number
+  ) => {
+    setUserProcessMarks((prev) => ({
+      ...prev,
+      [courseCode]: {
+        ...(prev[courseCode] ?? {}),
+        [component]: newScore,
+      },
+    }));
+  };
 
+  const getEffectiveProcessOverrides = (
+    courseCode: string
+  ): Partial<Record<ProcessComponentKey, number>> => {
+    const fromUrl =
+      courseCode === preselectedCourse ? preselectedProcessOverrides : {};
+    const fromState = userProcessMarks[courseCode] ?? {};
+    return { ...fromUrl, ...fromState };
+  };
+
+  // ⭐ Smart Presets using real assessment weights when available
   // 1. 🛡️ Kịch bản "Cứu nguy học vụ" (Pass All)
   const handlePresetPassAll = () => {
     if (!currentCourses) return;
     const updated: Record<string, number> = {};
     for (const course of currentCourses) {
       const pred = predictionMap.get(course.course_code);
-      const proc = getProcessScore(pred).score;
+      const weights = courseWeightsMap.get(course.course_code);
+      const finalW = weights?.finalWeight ?? 0.5;
+      const procW = weights?.processWeight ?? 0.5;
+      const proc = getProcessScore(
+        pred,
+        getEffectiveProcessOverrides(course.course_code),
+        weights,
+      ).score;
       const isAtRisk =
         pred?.risk_level === "HIGH" ||
         pred?.risk_level === "MEDIUM" ||
@@ -240,12 +427,15 @@ export const StudentWhatIfPage = () => {
         (pred?.predicted_score10 ?? 7.0) < 5.0;
 
       if (isAtRisk) {
-        // Cần tổng kết >= 5.0 => FinalExam >= 2 * 5.0 - proc = 10.0 - proc, tối thiểu >= 3.0
-        const req = Math.max(3.0, Math.min(10.0, Number((10.0 - proc).toFixed(1))));
+        const req = Math.max(
+          3.0,
+          Math.min(10.0, Number(((5.0 - proc * procW) / finalW).toFixed(1))),
+        );
         updated[course.course_code] = req;
       } else {
-        // Môn an toàn: giữ mức điểm dự báo của AI (hoặc >= 5.5)
-        const safeScore = pred?.predicted_score10 ? Math.max(5.5, pred.predicted_score10) : 6.5;
+        const safeScore = pred?.predicted_score10
+          ? Math.max(5.5, pred.predicted_score10)
+          : 6.5;
         updated[course.course_code] = Number(safeScore.toFixed(1));
       }
     }
@@ -258,13 +448,7 @@ export const StudentWhatIfPage = () => {
     const updated: Record<string, number> = {};
     for (const course of currentCourses) {
       const credits = course.credits || 0;
-      if (credits >= 3) {
-        // Môn 3-4 tín chỉ: Dồn điểm thi cao 8.5 để tối ưu hóa GPA học kỳ
-        updated[course.course_code] = 8.5;
-      } else {
-        // Môn 1-2 tín chỉ: Đặt mức an toàn 6.5 để tiết kiệm công sức
-        updated[course.course_code] = 6.5;
-      }
+      updated[course.course_code] = credits >= 3 ? 8.5 : 6.5;
     }
     setUserFinalExamScores(updated);
   };
@@ -275,14 +459,19 @@ export const StudentWhatIfPage = () => {
     const updated: Record<string, number> = {};
     for (const course of currentCourses) {
       const pred = predictionMap.get(course.course_code);
-      const proc = getProcessScore(pred).score;
-      // Để tổng kết >= 8.5 (Điểm A) => FinalExam >= 2 * 8.5 - proc = 17.0 - proc
-      const reqA = Number((17.0 - proc).toFixed(1));
+      const weights = courseWeightsMap.get(course.course_code);
+      const finalW = weights?.finalWeight ?? 0.5;
+      const procW = weights?.processWeight ?? 0.5;
+      const proc = getProcessScore(
+        pred,
+        getEffectiveProcessOverrides(course.course_code),
+        weights,
+      ).score;
+      const reqA = Number(((8.5 - proc * procW) / finalW).toFixed(1));
       if (reqA <= 10.0) {
         updated[course.course_code] = Math.max(8.0, reqA);
       } else {
-        // Nếu điểm quá trình thấp hơn, nhắm điểm B+ (tổng kết >= 8.0) => FinalExam >= 16.0 - proc
-        const reqBPlus = Number((16.0 - proc).toFixed(1));
+        const reqBPlus = Number(((8.0 - proc * procW) / finalW).toFixed(1));
         updated[course.course_code] = Math.max(7.5, Math.min(10.0, reqBPlus));
       }
     }
@@ -292,6 +481,13 @@ export const StudentWhatIfPage = () => {
   // Khôi phục mặc định AI
   const handleResetToPredictions = () => {
     setUserFinalExamScores({});
+    setUserProcessMarks({});
+    setManualAiCheckCourse(null);
+    if (activeCourseCode) {
+      setSearchParams({ course: activeCourseCode });
+    } else {
+      setSearchParams({});
+    }
   };
 
   const handleSelectCourse = (code: string) => {
@@ -299,7 +495,7 @@ export const StudentWhatIfPage = () => {
     setSearchParams({ course: code });
   };
 
-  // Dynamic calculations based on simulated final exam scores & process scores
+  // Dynamic calculations based on simulated final exam scores & real weights
   const {
     baselineTermGpa,
     simulatedTermGpa,
@@ -328,6 +524,9 @@ export const StudentWhatIfPage = () => {
         courseSimulationDetails: new Map<string, {
           processScore: number;
           finalExamScore: number;
+          finalWeightPct: number;
+          processWeightPct: number;
+          hasRealWeights: boolean;
           totalScore10: number;
           gpa4: number;
           letter: string;
@@ -352,6 +551,9 @@ export const StudentWhatIfPage = () => {
     const detailsMap = new Map<string, {
       processScore: number;
       finalExamScore: number;
+      finalWeightPct: number;
+      processWeightPct: number;
+      hasRealWeights: boolean;
       totalScore10: number;
       gpa4: number;
       letter: string;
@@ -361,17 +563,29 @@ export const StudentWhatIfPage = () => {
 
     for (const course of currentCourses) {
       const pred = predictionMap.get(course.course_code);
-      const procInfo = getProcessScore(pred);
+      const weights = courseWeightsMap.get(course.course_code);
+      const finalWeight = weights?.finalWeight ?? 0.5;
+      const processWeight = weights?.processWeight ?? 0.5;
+
+      const overrides = {
+        ...(course.course_code === preselectedCourse
+          ? preselectedProcessOverrides
+          : {}),
+        ...(userProcessMarks[course.course_code] ?? {}),
+      };
+      const procInfo = getProcessScore(pred, overrides, weights);
       const processScore = procInfo.score;
 
-      // Default final exam score: AI predicted score or 7.0
-      const defaultFinalExam = pred?.predicted_score10 ?? 7.0;
-      const finalExamScore = userFinalExamScores[course.course_code] ?? defaultFinalExam;
+      const defaultFinalExam =
+        course.course_code === preselectedCourse && targetFinalParam !== null
+          ? targetFinalParam
+          : (pred?.predicted_score10 ?? 7.0);
+      const finalExamScore =
+        userFinalExamScores[course.course_code] ?? defaultFinalExam;
 
       // Rule: Final exam < 3.0 is a fail (điểm liệt)
       const isDisqualified = finalExamScore < 3.0;
 
-      // Course total score = Process * 0.5 + FinalExam * 0.5
       let totalScore10: number;
       let gpa4: number;
       let letter: string;
@@ -383,11 +597,12 @@ export const StudentWhatIfPage = () => {
         disqCount += 1;
         simRiskCount += 1;
       } else {
-        totalScore10 = Number((processScore * 0.5 + finalExamScore * 0.5).toFixed(1));
+        totalScore10 = Number(
+          (processScore * processWeight + finalExamScore * finalWeight).toFixed(1),
+        );
         gpa4 = score10ToGpa4(totalScore10);
         letter = score10ToLetter(totalScore10);
 
-        // Course is considered at risk if total score < 5.0
         if (totalScore10 < 5.0) {
           simRiskCount += 1;
         }
@@ -398,6 +613,9 @@ export const StudentWhatIfPage = () => {
       detailsMap.set(course.course_code, {
         processScore,
         finalExamScore,
+        finalWeightPct: Math.round(finalWeight * 100),
+        processWeightPct: Math.round(processWeight * 100),
+        hasRealWeights: Boolean(weights?.hasRealWeights),
         totalScore10,
         gpa4,
         letter,
@@ -409,7 +627,6 @@ export const StudentWhatIfPage = () => {
     const simTermGpa = totalCredits > 0 ? simGradePoints / totalCredits : 0;
     const termDelta = Number((simTermGpa - baselineGpa).toFixed(2));
 
-    // Projected Cumulative GPA
     const passedCredits = summary?.total_passed_credits ?? 0;
     const curCumGpa = summary?.cumulative_gpa ?? 3.0;
     const pastGradePoints = curCumGpa * passedCredits;
@@ -435,7 +652,18 @@ export const StudentWhatIfPage = () => {
       disqualifiedCount: disqCount,
       courseSimulationDetails: detailsMap,
     };
-  }, [currentCourses, predictions, predictionMap, userFinalExamScores, summary]);
+  }, [
+    currentCourses,
+    predictions,
+    predictionMap,
+    courseWeightsMap,
+    userFinalExamScores,
+    userProcessMarks,
+    preselectedCourse,
+    preselectedProcessOverrides,
+    targetFinalParam,
+    summary,
+  ]);
 
   // Selected course details & SHAP factors
   const focusedCourse = useMemo(() => {
@@ -445,6 +673,102 @@ export const StudentWhatIfPage = () => {
   const focusedPrediction = useMemo(() => {
     return predictionMap.get(activeCourseCode);
   }, [predictionMap, activeCourseCode]);
+
+  // Build debounced what_if_marks payload for AI verification on focused course
+  const focusedEffectiveOverrides = useMemo(() => {
+    if (!activeCourseCode) return {};
+    return {
+      ...(activeCourseCode === preselectedCourse
+        ? preselectedProcessOverrides
+        : {}),
+      ...(userProcessMarks[activeCourseCode] ?? {}),
+    };
+  }, [
+    activeCourseCode,
+    preselectedCourse,
+    preselectedProcessOverrides,
+    userProcessMarks,
+  ]);
+
+  const hasFocusedEdits = Boolean(
+    activeCourseCode &&
+      (userFinalExamScores[activeCourseCode] !== undefined ||
+        Object.keys(focusedEffectiveOverrides).length > 0 ||
+        (activeCourseCode === preselectedCourse && targetFinalParam !== null) ||
+        manualAiCheckCourse === activeCourseCode),
+  );
+
+  const focusedWhatIfMarks = useMemo<Record<string, number | null> | null>(() => {
+    if (!activeCourseCode || !hasFocusedEdits) return null;
+    const baseMarks = focusedPrediction?.current_marks ?? {};
+    const simFinal =
+      courseSimulationDetails.get(activeCourseCode)?.finalExamScore ??
+      userFinalExamScores[activeCourseCode];
+
+    const merged: Record<string, number | null> = {};
+    for (const key of ["quiz", "lab", "btl", "giua_ky"] as const) {
+      const overrideVal = focusedEffectiveOverrides[key];
+      const baseVal = baseMarks[key];
+      if (overrideVal !== undefined) {
+        merged[key] = overrideVal;
+      } else if (baseVal !== undefined) {
+        merged[key] = baseVal;
+      }
+    }
+    if (simFinal !== undefined) {
+      merged.cuoi_ky = simFinal;
+    }
+    return merged;
+  }, [
+    activeCourseCode,
+    hasFocusedEdits,
+    focusedPrediction,
+    focusedEffectiveOverrides,
+    courseSimulationDetails,
+    userFinalExamScores,
+  ]);
+
+  const [debouncedWhatIf, setDebouncedWhatIf] = useState<{
+    courseCode: string;
+    marks: Record<string, number | null> | null;
+  }>({ courseCode: "", marks: null });
+
+  useEffect(() => {
+    if (!activeCourseCode || !focusedWhatIfMarks) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setDebouncedWhatIf({
+        courseCode: activeCourseCode,
+        marks: focusedWhatIfMarks,
+      });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [activeCourseCode, focusedWhatIfMarks]);
+
+  const shouldVerifyWithAi = Boolean(
+    studentId &&
+      activeCourseCode &&
+      focusedWhatIfMarks &&
+      debouncedWhatIf.courseCode === activeCourseCode &&
+      debouncedWhatIf.marks !== null,
+  );
+
+  const {
+    data: aiVerifiedResult,
+    isLoading: isLoadingAiVerify,
+    isFetching: isFetchingAiVerify,
+    refetch: refetchAiVerify,
+  } = useCourseCounterfactual(
+    studentId,
+    activeCourseCode || undefined,
+    activeSemesterCode,
+    targetGoalParam,
+    {
+      enabled: shouldVerifyWithAi,
+      whatIfMarks: debouncedWhatIf.marks,
+    },
+  );
 
   const isLoading =
     isLoadingCourses || isLoadingSummary || isLoadingPredictions;
@@ -489,7 +813,28 @@ export const StudentWhatIfPage = () => {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="cursor-pointer border-blue-200 bg-white text-xs font-semibold text-blue-700 shadow-2xs hover:bg-blue-50"
+              disabled={isFetchingAiVerify || !activeCourseCode}
+              onClick={() => {
+                if (!activeCourseCode) return;
+                setManualAiCheckCourse(activeCourseCode);
+                if (shouldVerifyWithAi) {
+                  void refetchAiVerify();
+                }
+              }}
+            >
+              <Sparkles
+                className={cn(
+                  "mr-1.5 h-3.5 w-3.5 text-blue-600",
+                  isFetchingAiVerify && "animate-spin",
+                )}
+              />
+              {isFetchingAiVerify ? "Đang kiểm chứng AI..." : "Kiểm tra lại bằng AI"}
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -500,6 +845,94 @@ export const StudentWhatIfPage = () => {
               Khôi phục Mặc định AI
             </Button>
           </div>
+        </div>
+      )}
+
+      {/* Live XGBoost Verification Banner for Focused Course */}
+      {focusedCourse && shouldVerifyWithAi && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
+          {isLoadingAiVerify || isFetchingAiVerify ? (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-56 bg-slate-100" />
+                <Skeleton className="h-3.5 w-72 bg-slate-100" />
+              </div>
+              <Skeleton className="h-8 w-36 bg-slate-100" />
+            </div>
+          ) : aiVerifiedResult ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-2.5">
+                <div
+                  className={cn(
+                    "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                    aiVerifiedResult.baseline.risk_level === "HIGH"
+                      ? "bg-rose-50 text-rose-600"
+                      : aiVerifiedResult.baseline.risk_level === "MEDIUM"
+                        ? "bg-amber-50 text-amber-600"
+                        : "bg-emerald-50 text-emerald-600",
+                  )}
+                >
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900">
+                      Kiểm chứng Thực tế bởi Mô hình AI ({focusedCourse.course_code})
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] font-bold px-1.5 py-0",
+                        aiVerifiedResult.baseline.risk_level === "HIGH"
+                          ? "border-rose-300 bg-rose-50 text-rose-700"
+                          : aiVerifiedResult.baseline.risk_level === "MEDIUM"
+                            ? "border-amber-300 bg-amber-50 text-amber-700"
+                            : "border-emerald-300 bg-emerald-50 text-emerald-700",
+                      )}
+                    >
+                      {aiVerifiedResult.baseline.risk_level === "HIGH"
+                        ? "Nguy cơ cao"
+                        : aiVerifiedResult.baseline.risk_level === "MEDIUM"
+                          ? "Cần chú ý"
+                          : "An toàn"}
+                    </Badge>
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-600">
+                    Sau khi áp dụng điểm giả lập: Xác suất rớt AI còn{" "}
+                    <span className="font-mono font-bold text-slate-900">
+                      {Math.round(aiVerifiedResult.baseline.fail_probability * 100)}%
+                    </span>{" "}
+                    • Điểm AI dự kiến:{" "}
+                    <span className="font-mono font-bold text-blue-700">
+                      {aiVerifiedResult.baseline.predicted_score10.toFixed(1)}/10 (Hạng{" "}
+                      {aiVerifiedResult.baseline.predicted_letter_grade})
+                    </span>
+                    .
+                  </p>
+                </div>
+              </div>
+
+              {focusedPrediction && (
+                <div className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-1.5 text-xs shrink-0">
+                  <span className="text-slate-500">Rủi ro gốc:</span>
+                  <span className="font-mono font-semibold text-slate-600 line-through">
+                    {Math.round(focusedPrediction.fail_probability * 100)}%
+                  </span>
+                  <ArrowRight className="h-3 w-3 text-slate-400" />
+                  <span className="font-mono font-bold text-emerald-700">
+                    {Math.round(aiVerifiedResult.baseline.fail_probability * 100)}%
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-amber-800">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+              <span>
+                Dịch vụ kiểm chứng AI tạm thời gián đoạn (503). Kết quả tính theo trọng số vẫn đang cập nhật bình thường.
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -578,7 +1011,7 @@ export const StudentWhatIfPage = () => {
                         Giả lập Điểm thi Cuối kỳ
                       </CardTitle>
                       <CardDescription className="text-xs text-slate-500">
-                        Điều chỉnh điểm thi cuối kỳ (tỷ trọng 50%) kết hợp với điểm quá trình LMS để tính điểm tổng kết.
+                        Điều chỉnh điểm thi cuối kỳ và các cột quá trình (tự động áp dụng trọng số thật của môn học) để tính điểm tổng kết.
                       </CardDescription>
                     </div>
                   </div>
@@ -642,7 +1075,29 @@ export const StudentWhatIfPage = () => {
                   const letter = sim?.letter ?? "B";
                   const isDisqualified = sim?.isDisqualified ?? false;
 
-                  const procInfo = getProcessScore(pred);
+                  const weights = courseWeightsMap.get(course.course_code);
+                  const overrides = getEffectiveProcessOverrides(course.course_code);
+                  const procInfo = getProcessScore(pred, overrides, weights);
+                  const finalWeightPct = sim?.finalWeightPct ?? 50;
+                  const processWeightPct = sim?.processWeightPct ?? 50;
+                  const editableProcessKeys: Array<{
+                    key: ProcessComponentKey;
+                    label: string;
+                  }> = [
+                    { key: "quiz" as const, label: "Quiz" },
+                    { key: "lab" as const, label: "Lab" },
+                    { key: "btl" as const, label: "BTL" },
+                    { key: "giua_ky" as const, label: "Giữa kỳ" },
+                  ].filter((item) => {
+                    const hasWeight =
+                      weights?.hasRealWeights &&
+                      weights.componentWeights[item.key] > 0;
+                    const hasBaseMark =
+                      pred?.current_marks?.[item.key] !== null &&
+                      pred?.current_marks?.[item.key] !== undefined;
+                    const hasOverride = overrides[item.key] !== undefined;
+                    return hasWeight || hasBaseMark || hasOverride;
+                  });
 
                   // Feasibility assessment for this course
                   const feasibility = getFeasibilityInfo(
@@ -733,7 +1188,7 @@ export const StudentWhatIfPage = () => {
                               {processScore.toFixed(1)}/10
                             </span>
                             <span className="text-[11px] text-slate-400">
-                              (Tỷ trọng 50% • {procInfo.marksSummary})
+                              (Tỷ trọng {processWeightPct}%{sim?.hasRealWeights ? " thật" : ""} • {procInfo.marksSummary})
                             </span>
                           </div>
 
@@ -767,7 +1222,7 @@ export const StudentWhatIfPage = () => {
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
                           <div className="flex-1">
                             <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
-                              <span>Điểm thi Cuối kỳ (Tỷ trọng 50%)</span>
+                              <span>Điểm thi Cuối kỳ (Tỷ trọng {finalWeightPct}%)</span>
                               <span className="font-mono font-bold text-blue-700">
                                 {finalExamScore.toFixed(1)} / 10
                               </span>
@@ -800,6 +1255,56 @@ export const StudentWhatIfPage = () => {
                             </div>
                           </div>
                         </div>
+
+                        {/* Optional Component Sliders for Focused Course (Quiz / Lab / BTL / Giữa kỳ) */}
+                        {isTarget && editableProcessKeys.length > 0 && (
+                          <div className="mt-3 border-t border-slate-200/70 pt-3">
+                            <p className="mb-2 text-[11px] font-semibold text-slate-600">
+                              Điều chỉnh thêm cột điểm quá trình (theo Counterfactual):
+                            </p>
+                            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                              {editableProcessKeys.map((item) => {
+                                const baseVal = pred?.current_marks?.[item.key];
+                                const val =
+                                  overrides[item.key] ??
+                                  (baseVal !== null && baseVal !== undefined
+                                    ? Number(baseVal)
+                                    : 6.0);
+                                return (
+                                  <div
+                                    key={item.key}
+                                    className="rounded-md border border-slate-200/70 bg-white px-2.5 py-2"
+                                  >
+                                    <div className="mb-1 flex items-center justify-between text-[11px]">
+                                      <span className="font-medium text-slate-600">
+                                        {item.label}
+                                      </span>
+                                      <span className="font-mono font-bold text-slate-800">
+                                        {val.toFixed(1)}/10
+                                      </span>
+                                    </div>
+                                    <input
+                                      type="range"
+                                      min="0"
+                                      max="10"
+                                      step="0.5"
+                                      value={val}
+                                      onChange={(e) =>
+                                        handleProcessMarkChange(
+                                          course.course_code,
+                                          item.key,
+                                          parseFloat(e.target.value),
+                                        )
+                                      }
+                                      className="h-1.5 w-full cursor-pointer accent-blue-600"
+                                      aria-label={`Điểm ${item.label} cho ${course.course_name}`}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* ⭐ CẢI TIẾN 4: Thẻ Đánh giá Mức độ Khả thi (Feasibility Gauge) */}

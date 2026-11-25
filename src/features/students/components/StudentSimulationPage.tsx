@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,7 +11,6 @@ import {
   SlidersHorizontal,
   RefreshCw,
   Info,
-  CheckCircle2,
   TrendingUp,
   TrendingDown,
   Layers,
@@ -28,13 +27,22 @@ import { useActiveSemester, formatSemesterLabel } from "@/hooks/use-active-semes
 import { score10ToLetter } from "@/lib/grade-scale";
 import { formatFeatureName } from "@/lib/shap-features";
 import { cn } from "@/lib/utils";
-import type { CoursePredictionResponse, ShapFactorResponse } from "@/types";
+import type {
+  CourseCounterfactualResponse,
+  CoursePredictionResponse,
+  ShapFactorResponse,
+  TargetGoal,
+} from "@/types";
 import {
+  COURSE_COUNTERFACTUAL_QUERY_KEY,
   COURSE_PREDICTION_QUERY_KEY,
+  useCourseCounterfactual,
   useCoursePrediction,
   useStudentCurrentCourses,
   useStudentEnrollments,
 } from "../api/student-api";
+import { CounterfactualRecourseCard } from "./CounterfactualRecourseCard";
+import { PedagogicalAdviceCard } from "./PedagogicalAdviceCard";
 
 type CourseFilterType = "ALL" | "ATTENTION" | "SAFE";
 
@@ -110,6 +118,7 @@ export const StudentSimulationPage = () => {
 
   // Course list filter state: All, Attention (high/medium risk), Safe
   const [courseFilter, setCourseFilter] = useState<CourseFilterType>("ALL");
+  const [goalByCourse, setGoalByCourse] = useState<Record<string, TargetGoal>>({});
 
   // 1. Fetch current registered courses & enrollments (fast DB call ~0.05s)
   const { data: rawCurrentCourses, isLoading: isLoadingCourses } =
@@ -151,31 +160,125 @@ export const StudentSimulationPage = () => {
     return "";
   }, [queryCourse, activeCourses]);
 
-  // 2. On-Demand Single Course Prediction Query (POST /api/v1/predictions/course ~0.2s)
+  const currentTargetGoal: TargetGoal =
+    goalByCourse[currentActiveCourseCode] ?? "PASS";
+
+  // 2. Unified On-Demand Counterfactual + Prediction + TreeSHAP + 13 Scenarios (~80-120ms)
   const {
-    data: singlePrediction,
-    isLoading: isLoadingSingle,
-    refetch: refetchSingle,
-    isRefetching: isRefetchingSingle,
+    data: counterfactualData,
+    isLoading: isLoadingCounterfactual,
+    refetch: refetchCounterfactual,
+    isRefetching: isRefetchingCounterfactual,
+  } = useCourseCounterfactual(
+    studentId,
+    currentActiveCourseCode || undefined,
+    activeSemesterCode,
+    currentTargetGoal
+  );
+
+  // Smart default target goal when viewing a LOW-risk course for the first time
+  useEffect(() => {
+    if (
+      !currentActiveCourseCode ||
+      goalByCourse[currentActiveCourseCode] !== undefined ||
+      !counterfactualData ||
+      counterfactualData.course_code !== currentActiveCourseCode
+    ) {
+      return;
+    }
+    if (counterfactualData.baseline.risk_level === "LOW") {
+      const smartGoal: TargetGoal =
+        counterfactualData.baseline.predicted_score10 >= 7.0
+          ? "GRADE_A"
+          : "GRADE_B";
+      setGoalByCourse((prev) => ({
+        ...prev,
+        [currentActiveCourseCode]: smartGoal,
+      }));
+    }
+  }, [currentActiveCourseCode, counterfactualData, goalByCourse]);
+
+  // Graceful fallback to /predictions/course only if /course/counterfactual fails or returns null
+  const shouldFetchFallbackPred =
+    Boolean(studentId && currentActiveCourseCode) &&
+    !isLoadingCounterfactual &&
+    !counterfactualData;
+
+  const {
+    data: fallbackSinglePrediction,
+    isLoading: isLoadingFallbackPred,
+    refetch: refetchFallbackPred,
+    isRefetching: isRefetchingFallbackPred,
   } = useCoursePrediction(
     studentId,
     currentActiveCourseCode || undefined,
-    activeSemesterCode
+    activeSemesterCode,
+    { enabled: shouldFetchFallbackPred }
   );
+
+  const mapCounterfactualToPrediction = (
+    cf: CourseCounterfactualResponse
+  ): CoursePredictionResponse => ({
+    course_code: cf.course_code,
+    course_name: cf.course_name,
+    credits: cf.credits,
+    class_id: cf.class_id,
+    class_group: cf.class_group,
+    lecturer_name: cf.lecturer_name,
+    semester_code: cf.semester_code,
+    record_status: null,
+    fail_probability: cf.baseline.fail_probability,
+    predicted_course_fail: cf.baseline.predicted_course_fail,
+    is_at_risk: cf.baseline.is_at_risk,
+    risk_level: cf.baseline.risk_level,
+    predicted_score10: cf.baseline.predicted_score10,
+    predicted_gpa4: cf.baseline.predicted_gpa4,
+    current_marks: cf.baseline.current_marks,
+    top_shap_factors: cf.top_shap_factors,
+  });
 
   // Helper to retrieve prediction from React Query cache for any course
   const getCachedPrediction = (code: string): CoursePredictionResponse | undefined => {
-    if (code === currentActiveCourseCode && singlePrediction) {
-      return singlePrediction;
+    if (code === currentActiveCourseCode) {
+      if (counterfactualData) {
+        return mapCounterfactualToPrediction(counterfactualData);
+      }
+      if (fallbackSinglePrediction) {
+        return fallbackSinglePrediction;
+      }
     }
-    return queryClient.getQueryData<CoursePredictionResponse>(
-      COURSE_PREDICTION_QUERY_KEY(studentId, code, activeSemesterCode)
+
+    const goalPreference: TargetGoal[] = goalByCourse[code]
+      ? [goalByCourse[code], "PASS", "GRADE_C", "GRADE_B", "GRADE_A"]
+      : ["PASS", "GRADE_B", "GRADE_A", "GRADE_C"];
+
+    for (const g of goalPreference) {
+      const cfCached = queryClient.getQueryData<CourseCounterfactualResponse | null>(
+        COURSE_COUNTERFACTUAL_QUERY_KEY(studentId, code, activeSemesterCode, g)
+      );
+      if (cfCached) {
+        return mapCounterfactualToPrediction(cfCached);
+      }
+    }
+
+    return (
+      queryClient.getQueryData<CoursePredictionResponse | null>(
+        COURSE_PREDICTION_QUERY_KEY(studentId, code, activeSemesterCode)
+      ) ?? undefined
     );
   };
 
   // Handler for course switching
   const handleSelectCourse = (code: string) => {
     setSearchParams({ course: code });
+  };
+
+  const handleTargetGoalChange = (goal: TargetGoal) => {
+    if (!currentActiveCourseCode) return;
+    setGoalByCourse((prev) => ({
+      ...prev,
+      [currentActiveCourseCode]: goal,
+    }));
   };
 
   // Categorize courses into Attention vs Safe groups based on cached predictions
@@ -185,7 +288,7 @@ export const StudentSimulationPage = () => {
       return pred && (pred.risk_level === "HIGH" || pred.risk_level === "MEDIUM" || pred.is_at_risk);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCourses, currentActiveCourseCode, singlePrediction]);
+  }, [activeCourses, currentActiveCourseCode, counterfactualData, fallbackSinglePrediction, goalByCourse]);
 
   const safeCourses = useMemo(() => {
     return activeCourses.filter((c) => {
@@ -193,7 +296,7 @@ export const StudentSimulationPage = () => {
       return pred && !pred.is_at_risk && pred.risk_level === "LOW";
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCourses, currentActiveCourseCode, singlePrediction]);
+  }, [activeCourses, currentActiveCourseCode, counterfactualData, fallbackSinglePrediction, goalByCourse]);
 
   // Courses filtered by current tab
   const filteredCourses = useMemo(() => {
@@ -215,7 +318,8 @@ export const StudentSimulationPage = () => {
   };
 
   // Selected course prediction details
-  const activePrediction = singlePrediction || (currentActiveCourseCode ? getCachedPrediction(currentActiveCourseCode) : undefined) || null;
+  const activePrediction =
+    (currentActiveCourseCode ? getCachedPrediction(currentActiveCourseCode) : undefined) || null;
 
   // Selected course metadata
   const activeCourseMeta = useMemo(() => {
@@ -223,6 +327,9 @@ export const StudentSimulationPage = () => {
     return activeCourses.find((c) => c.course_code === currentActiveCourseCode) || null;
   }, [currentActiveCourseCode, activeCourses]);
 
+  const isLoadingSingle =
+    isLoadingCounterfactual || (shouldFetchFallbackPred && isLoadingFallbackPred);
+  const isRefetchingSingle = isRefetchingCounterfactual || isRefetchingFallbackPred;
   const isLoadingCourseDetail = isLoadingSingle && !activePrediction;
   const isPredictionUnavailable =
     !isLoadingCourses &&
@@ -230,10 +337,67 @@ export const StudentSimulationPage = () => {
     Boolean(currentActiveCourseCode) &&
     !activePrediction;
 
-  // Final exam score targets for active course
+  const refetchSingle = () => {
+    void refetchCounterfactual();
+    if (shouldFetchFallbackPred) {
+      void refetchFallbackPred();
+    }
+  };
+
+  // Fallback final exam score targets if counterfactual service is offline
   const finalExamTargets = useMemo(() => {
     return calculateFinalExamTargets(activePrediction?.current_marks, activePrediction?.predicted_score10);
   }, [activePrediction]);
+
+  const navigateToWhatIf = (params?: {
+    finalTarget?: number
+    targetGoal?: TargetGoal
+    changes?: Record<string, number | null>
+  }) => {
+    if (!currentActiveCourseCode) {
+      navigate("/student/what-if");
+      return;
+    }
+
+    const goal = params?.targetGoal ?? currentTargetGoal;
+    const targetsSummary = counterfactualData?.final_exam_targets;
+    const goalRawScore = targetsSummary
+      ? goal === "PASS"
+        ? targetsSummary.pass_score
+        : goal === "GRADE_C"
+          ? targetsSummary.grade_c_score
+          : goal === "GRADE_B"
+            ? targetsSummary.grade_b_score
+            : targetsSummary.grade_a_score
+      : goal === "GRADE_A"
+        ? finalExamTargets.gradeA.score
+        : goal === "GRADE_B"
+          ? finalExamTargets.gradeB.score
+          : finalExamTargets.pass.score;
+
+    const resolvedFinalTarget =
+      params?.finalTarget ??
+      (goalRawScore !== null && goalRawScore !== undefined && goalRawScore <= 10
+        ? Number(Math.max(3.0, goalRawScore).toFixed(1))
+        : undefined);
+
+    const nextParams = new URLSearchParams({
+      course: currentActiveCourseCode,
+      targetGoal: goal,
+    });
+    if (resolvedFinalTarget !== undefined) {
+      nextParams.set("targetFinal", resolvedFinalTarget.toFixed(1));
+    }
+    if (params?.changes) {
+      for (const compKey of ["quiz", "lab", "btl", "giua_ky"]) {
+        const val = params.changes[compKey];
+        if (val !== null && val !== undefined) {
+          nextParams.set(compKey, Number(val).toFixed(1));
+        }
+      }
+    }
+    navigate(`/student/what-if?${nextParams.toString()}`);
+  };
 
   return (
     <div className="space-y-6 pb-12">
@@ -272,13 +436,7 @@ export const StudentSimulationPage = () => {
           </Button>
           <Button
             size="sm"
-            onClick={() =>
-              navigate(
-                currentActiveCourseCode
-                  ? `/student/what-if?course=${currentActiveCourseCode}`
-                  : "/student/what-if"
-              )
-            }
+            onClick={() => navigateToWhatIf()}
             className="cursor-pointer gap-1.5 rounded-lg bg-blue-600 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700"
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
@@ -486,15 +644,31 @@ export const StudentSimulationPage = () => {
                 ) : activePrediction ? (
                   <>
                     <div className="flex items-baseline justify-between">
-                      <span className="text-xs text-slate-400">Để Qua môn (≥ 5.0):</span>
+                      <span className="text-xs text-slate-400">
+                        {counterfactualData ? "Để Qua môn (≥ 4.0):" : "Để Qua môn (≥ 5.0):"}
+                      </span>
                       <span className="text-base font-extrabold text-emerald-400">
-                        {finalExamTargets.pass.label}
+                        {counterfactualData?.final_exam_targets
+                          ? counterfactualData.final_exam_targets.pass_score !== null &&
+                            counterfactualData.final_exam_targets.pass_score <= 10
+                            ? counterfactualData.final_exam_targets.pass_score <= 3.0
+                              ? "≥ 3.0 (Tránh điểm liệt)"
+                              : `≥ ${counterfactualData.final_exam_targets.pass_score.toFixed(1)} điểm`
+                            : "Vượt 10.0"
+                          : finalExamTargets.pass.label}
                       </span>
                     </div>
                     <div className="flex items-baseline justify-between">
                       <span className="text-xs text-slate-400">Để Đạt loại B (≥ 7.0):</span>
                       <span className="text-sm font-bold text-blue-400">
-                        {finalExamTargets.gradeB.label}
+                        {counterfactualData?.final_exam_targets
+                          ? counterfactualData.final_exam_targets.grade_b_score !== null &&
+                            counterfactualData.final_exam_targets.grade_b_score <= 10
+                            ? counterfactualData.final_exam_targets.grade_b_score <= 3.0
+                              ? "≥ 3.0 (Tránh điểm liệt)"
+                              : `≥ ${counterfactualData.final_exam_targets.grade_b_score.toFixed(1)} điểm`
+                            : "Vượt 10.0"
+                          : finalExamTargets.gradeB.label}
                       </span>
                     </div>
                   </>
@@ -510,9 +684,19 @@ export const StudentSimulationPage = () => {
           </div>
 
           <p className="mt-2.5 border-t border-slate-800/80 pt-2 text-xs text-slate-400">
-            {finalExamTargets.hasRecordedMarks
-              ? `Điểm quá trình ghi nhận: ${finalExamTargets.estimatedProcessScore}/10 (50% tổng kết)`
-              : "Ước lượng theo dữ liệu thành phần & điểm liệt ≥ 3.0"}
+            {counterfactualData?.final_exam_targets
+              ? `${
+                  counterfactualData.final_exam_targets.used_exact_marks
+                    ? "Tính theo điểm quá trình đã chốt"
+                    : "Ước lượng cột chưa chấm"
+                } (Cuối kỳ ${Math.round(
+                  (counterfactualData.final_exam_targets.final_exam_weight <= 1
+                    ? counterfactualData.final_exam_targets.final_exam_weight * 100
+                    : counterfactualData.final_exam_targets.final_exam_weight) || 50
+                )}%)`
+              : finalExamTargets.hasRecordedMarks
+                ? `Điểm quá trình ghi nhận: ${finalExamTargets.estimatedProcessScore}/10 (50% tổng kết)`
+                : "Ước lượng theo dữ liệu thành phần & điểm liệt ≥ 3.0"}
           </p>
         </div>
       </div>
@@ -933,148 +1117,40 @@ export const StudentSimulationPage = () => {
                   )}
                 </div>
 
-                {/* TÍNH NĂNG: Mục tiêu Điểm thi Cuối kỳ Cần đạt */}
-                <div className="space-y-3.5 rounded-xl border border-blue-100 bg-blue-50/30 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <Target className="h-4 w-4 text-blue-600" />
-                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
-                        Mục tiêu Điểm thi Cuối kỳ Cần đạt
-                      </span>
-                    </div>
-                    <Badge variant="outline" className="border-blue-200 bg-blue-50 text-[10px] font-semibold text-blue-700">
-                      {finalExamTargets.hasRecordedMarks ? "Dựa trên điểm thành phần" : "Ước lượng theo mô hình AI"}
-                    </Badge>
-                  </div>
-
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    Điểm thi kết thúc học phần cần đạt để đạt các mốc xếp loại (giả định tỷ trọng thi cuối kỳ chiếm 50% tổng kết và điểm liệt ≥ 3.0):
-                  </p>
-
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                    {/* Mục tiêu 1: Để Qua môn (>= 5.0) */}
-                    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-slate-500">Để Qua môn (≥ 5.0)</span>
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                      </div>
-                      <p className="mt-1 text-base font-bold text-slate-900">
-                        {finalExamTargets.pass.label}
-                      </p>
-                      <p className="mt-0.5 text-[10px] text-slate-400">
-                        Đạt điểm D/C học phần
-                      </p>
-                    </div>
-
-                    {/* Mục tiêu 2: Để Đạt điểm B (>= 7.0) */}
-                    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-slate-500">Để Đạt điểm B (≥ 7.0)</span>
-                        <Award className="h-3.5 w-3.5 text-blue-600" />
-                      </div>
-                      <p className="mt-1 text-base font-bold text-blue-700">
-                        {finalExamTargets.gradeB.label}
-                      </p>
-                      <p className="mt-0.5 text-[10px] text-slate-400">
-                        Xếp loại Khá
-                      </p>
-                    </div>
-
-                    {/* Mục tiêu 3: Để Đạt điểm A (>= 8.5) */}
-                    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-slate-500">Để Đạt điểm A (≥ 8.5)</span>
-                        <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                      </div>
-                      <p className="mt-1 text-base font-bold text-amber-700">
-                        {finalExamTargets.gradeA.label}
-                      </p>
-                      <p className="mt-0.5 text-[10px] text-slate-400">
-                        Xếp loại Giỏi
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                {/* TÍNH NĂNG: Lộ trình Counterfactual & Mục tiêu Điểm thi Cuối kỳ Cần đạt */}
+                <CounterfactualRecourseCard
+                  courseCode={currentActiveCourseCode}
+                  counterfactualData={counterfactualData ?? null}
+                  isLoading={isLoadingCounterfactual}
+                  targetGoal={currentTargetGoal}
+                  onTargetGoalChange={handleTargetGoalChange}
+                  fallbackTargets={finalExamTargets}
+                  onApplyPlanToWhatIf={(params) => navigateToWhatIf(params)}
+                />
 
                 {/* Thông tin giải thích mô hình */}
                 <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3.5 text-xs text-slate-600">
                   <Info className="h-4 w-4 shrink-0 text-slate-400 mt-0.5" />
                   <p className="leading-relaxed text-[11px]">
-                    Kết quả dự báo được tính toán theo nhu cầu bằng mô hình máy học XGBoost kết hợp dữ liệu lịch sử đào tạo. Các ước lượng sẽ tự động điều chỉnh chính xác hơn khi có thêm điểm thi giữa kỳ.
+                    Kết quả dự báo và phương án cải thiện Counterfactual được tính toán trực tiếp trên mô hình máy học XGBoost theo trọng số thật của học phần. Các ước lượng sẽ tự động điều chỉnh chính xác hơn khi có thêm điểm thành phần.
                   </p>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Khuyến nghị học vụ */}
-            <Card className="border-slate-200 bg-white shadow-xs">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-blue-600" />
-                  Khuyến nghị Học vụ Cá nhân hóa
-                </CardTitle>
-                <CardDescription className="text-xs text-slate-500">
-                  Định hướng học tập dựa trên mức độ rủi ro và các yếu tố SHAP của học phần
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent className="space-y-3">
-                {activePrediction?.risk_level === "HIGH" ? (
-                  <div className="rounded-lg border border-rose-200 bg-rose-50/60 p-3.5 text-xs text-rose-900 space-y-1.5">
-                    <div className="flex items-center gap-1.5 font-bold text-rose-950">
-                      <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
-                      Cần ưu tiên can thiệp & Ôn tập trọng tâm
-                    </div>
-                    <p className="leading-relaxed text-rose-800">
-                      Học phần này có xác suất rủi ro rớt môn cao. Bạn nên chủ động trao đổi với giảng viên{" "}
-                      <strong>{activeCourseMeta?.lecturer_name || "phụ trách"}</strong> trong giờ tiếp sinh viên, tham gia học nhóm và ôn lại kiến thức của các môn học tiên quyết.
-                    </p>
-                  </div>
-                ) : activePrediction?.risk_level === "MEDIUM" ? (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3.5 text-xs text-amber-900 space-y-1.5">
-                    <div className="flex items-center gap-1.5 font-bold text-amber-950">
-                      <Info className="h-4 w-4 text-amber-600 shrink-0" />
-                      Cần tập trung củng cố điểm số
-                    </div>
-                    <p className="leading-relaxed text-amber-800">
-                      Kết quả đang tiệm cận ngưỡng rủi ro. Tập trung làm tốt bài tập lớn, hoàn thành bài tập thực hành và chuẩn bị kỹ cho kỳ thi cuối kỳ sẽ giúp bạn nâng điểm lên mức B hoặc cao hơn.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3.5 text-xs text-emerald-900 space-y-1.5">
-                    <div className="flex items-center gap-1.5 font-bold text-emerald-950">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                      Phong độ học tập vững chắc
-                    </div>
-                    <p className="leading-relaxed text-emerald-800">
-                      Nền tảng kiến thức và điểm quá trình của bạn cho thấy rủi ro rớt môn rất thấp. Hãy duy trì chuyên cần và nỗ lực ở kỳ thi cuối kỳ để đạt điểm A xuất sắc.
-                    </p>
-                  </div>
-                )}
-
-                <div className="pt-2 flex flex-wrap items-center justify-between gap-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => navigate("/student/overview")}
-                    className="cursor-pointer text-xs font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    &larr; Quay lại Tổng quan
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      navigate(`/student/what-if?course=${currentActiveCourseCode}`)
-                    }
-                    className="cursor-pointer gap-1.5 rounded-lg bg-blue-600 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700"
-                  >
-                    <span>Thử nghiệm giả lập điểm trong What-If</span>
-                    <ArrowRight className="h-3 w-3" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Khuyến nghị học vụ từ 13 Kịch bản Sư phạm & Trợ lý AI */}
+            <PedagogicalAdviceCard
+              studentId={studentId}
+              courseCode={currentActiveCourseCode}
+              semesterCode={activeSemesterCode}
+              targetGoal={currentTargetGoal}
+              riskLevel={activePrediction?.risk_level}
+              lecturerName={activeCourseMeta?.lecturer_name}
+              recommendations={counterfactualData?.recommendations ?? []}
+              isLoadingCounterfactual={isLoadingCounterfactual}
+              onNavigateOverview={() => navigate("/student/overview")}
+              onNavigateWhatIf={() => navigateToWhatIf()}
+            />
           </div>
 
           {/* CỘT PHẢI (5 cols): Card trắng TreeSHAP XAI (Dịch tên biến kỹ thuật sang tiếng Việt thân thiện) */}

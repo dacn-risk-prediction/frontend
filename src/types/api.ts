@@ -434,4 +434,106 @@ export interface PredictClassPayload {
   include_shap?: boolean
 }
 
+export type TargetGoal = 'PASS' | 'GRADE_C' | 'GRADE_B' | 'GRADE_A'
+export type AdviceSource = 'cache' | 'gemini' | 'fallback'
+export type RecommendationCategory =
+  | 'RECOVERY'
+  | 'WARNING'
+  | 'OPTIMIZE'
+  | 'WITHDRAW_ADVICE'
+  | 'STRENGTH'
+  | string
+
+export interface PredictCourseCounterfactualRequest {
+  student_id: string
+  course_code: string
+  semester_code?: string | null
+  target_goal?: TargetGoal
+  locked_components?: string[] | null
+  allow_improve_recorded_process?: boolean
+  what_if_marks?: Record<string, number | null> | null
+}
+
+export interface CounterfactualPlanResponse {
+  plan_id: string
+  title: string
+  changes: Record<string, number | null>
+  projected_fail_probability: number
+  projected_score10: number
+  projected_letter_grade: string
+  effort_score: number
+  is_feasible: boolean
+}
+
+export interface FinalExamTargetSummaryResponse {
+  pass_score: number | null
+  grade_c_score: number | null
+  grade_b_score: number | null
+  grade_a_score: number | null
+  is_pass_feasible: boolean
+  used_exact_marks: boolean
+  final_exam_weight: number
+}
+
+export interface PedagogicalRecommendationResponse {
+  scenario_code: string
+  category: RecommendationCategory
+  priority: string
+  title: string
+  message: string
+  targets: Record<string, unknown>
+  linked_shap_features: string[]
+  can_withdraw_hint: boolean
+}
+
+export interface CourseCounterfactualBaselineResponse {
+  fail_probability: number
+  is_calibrated: boolean
+  predicted_course_fail: number
+  is_at_risk: boolean
+  risk_level: RiskLevel
+  predicted_score10: number
+  predicted_gpa4: number
+  predicted_letter_grade: string
+  current_marks: Record<string, number | null>
+  weights: Record<string, number>
+}
+
+export interface CourseCounterfactualResponse {
+  student_id: string
+  course_code: string
+  course_name: string | null
+  credits: number | null
+  class_id: string | null
+  class_group: string | null
+  lecturer_name: string | null
+  semester_code: string
+  target_goal: TargetGoal | string
+  already_at_target: boolean
+  is_feasible: boolean
+  editable_components: string[]
+  inference_time_ms: number
+  baseline: CourseCounterfactualBaselineResponse
+  plans: CounterfactualPlanResponse[]
+  final_exam_targets: FinalExamTargetSummaryResponse
+  recommendations: PedagogicalRecommendationResponse[]
+  top_shap_factors: ShapFactorResponse[]
+}
+
+export interface CourseAdviseAIRequest extends PredictCourseCounterfactualRequest {
+  force_refresh?: boolean
+}
+
+export interface CourseAdviseAIResponse {
+  course_code: string
+  course_name: string | null
+  semester_code: string
+  target_goal: string
+  scenario_code: string | null
+  advice_markdown: string
+  source: AdviceSource
+  model_name: string | null
+  cached_at: string | null
+}
+
 
