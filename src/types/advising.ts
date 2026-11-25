@@ -121,3 +121,40 @@ export interface AdvisingActionTaskTogglePayload {
 export interface UnreadCountResponse {
   unread_count: number;
 }
+
+export type NotificationDirection = "all" | "received" | "sent";
+
+export interface AdvisingNotificationItem {
+  id: string; // UUID
+  session_id: string; // UUID
+  course_code: string;
+  course_name?: string | null;
+  semester_code: string;
+  student_id: string;
+  student_name?: string | null;
+  lecturer_id: string;
+  lecturer_name?: string | null;
+  sender_id: string;
+  sender_role: "student" | "lecturer" | "admin" | string;
+  sender_name: string;
+  message_type: AdvisingMessageType;
+  content: string;
+  is_read: boolean;
+  read_at?: string | null;
+  created_at: string;
+  direction: "received" | "sent";
+}
+
+export interface AdvisingNotificationListResponse {
+  items: AdvisingNotificationItem[];
+  total: number;
+  unread_count: number;
+  received_count: number;
+  sent_count: number;
+  has_more: boolean;
+}
+
+export interface MarkReadResponse {
+  marked_count: number;
+  unread_count: number;
+}

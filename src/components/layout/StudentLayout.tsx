@@ -14,7 +14,6 @@ import { useAuthUser, useLogout } from "@/features/auth";
 import { useActiveSemester, formatSemesterLabel } from "@/hooks/use-active-semester";
 import { cn } from "@/lib/utils";
 import {
-  Bell,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -32,7 +31,11 @@ import {
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useUnreadAdvisingCount } from "@/features/advising/api/advising-api";
+import {
+  useAdvisingSessions,
+  useUnreadAdvisingCount,
+} from "@/features/advising/api/advising-api";
+import { NotificationBell } from "./NotificationBell";
 
 interface NavItem {
   name: string;
@@ -82,7 +85,12 @@ export const StudentLayout = () => {
   const logout = useLogout();
   const activeSemesterLabel = formatSemesterLabel(activeSemester?.semester_code);
   const { data: unreadData } = useUnreadAdvisingCount(!!user);
-  const unreadCount = unreadData?.unread_count ?? 0;
+  const { data: advisingSessions = [] } = useAdvisingSessions(!!user);
+  const sessionUnreadTotal = advisingSessions.reduce(
+    (sum, s) => sum + (s.unread_count ?? 0),
+    0,
+  );
+  const unreadCount = Math.max(unreadData?.unread_count ?? 0, sessionUnreadTotal);
 
   const navItems = useMemo<NavItem[]>(() => {
     return NAV_ITEMS.map((item) => {
@@ -355,23 +363,12 @@ export const StudentLayout = () => {
 
           {/* Right Header Actions */}
           <div className="flex items-center gap-4">
-            {/* Notification Bell with Dynamic Unread Badge */}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="relative text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-full"
-              onClick={() => navigate("/student/advising")}
-              aria-label="View notifications"
-            >
-              <Bell className="h-5 w-5" />
-              {unreadCount > 0 ? (
-                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white ring-2 ring-white animate-pulse">
-                  {unreadCount > 99 ? "99+" : unreadCount}
-                </span>
-              ) : (
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-blue-600 ring-2 ring-white" />
-              )}
-            </Button>
+            {/* Notification Bell Dropdown */}
+            <NotificationBell
+              role="student"
+              unreadCount={unreadCount}
+              enabled={Boolean(user)}
+            />
 
             <div className="h-5 w-px bg-slate-200" />
 

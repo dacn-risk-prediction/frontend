@@ -26,6 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthUser } from "@/features/auth";
 import { useActiveSemester, formatSemesterLabel } from "@/hooks/use-active-semester";
 import { score10ToLetter } from "@/lib/grade-scale";
+import { formatFeatureName } from "@/lib/shap-features";
 import { cn } from "@/lib/utils";
 import type { CoursePredictionResponse, ShapFactorResponse } from "@/types";
 import {
@@ -36,101 +37,6 @@ import {
 } from "../api/student-api";
 
 type CourseFilterType = "ALL" | "ATTENTION" | "SAFE";
-
-/**
- * Format raw backend feature identifiers into friendly Vietnamese terms
- */
-function formatFeatureName(rawFeature: string): { label: string; tip?: string } {
-  const f = rawFeature.toLowerCase().trim();
-
-  if (f.includes("cumulative_gpa") || f.includes("gpa_tich_luy") || f.includes("gpa_cum")) {
-    return {
-      label: "Điểm trung bình tích lũy (GPA)",
-      tip: "Nền tảng học lực tích lũy qua các học kỳ trước",
-    };
-  }
-  if (f.includes("giua_ky") || f.includes("midterm") || f.includes("diem_gk")) {
-    return {
-      label: "Điểm thi giữa kỳ học phần",
-      tip: "Điểm đánh giá giữa kỳ hiện tại trên lớp",
-    };
-  }
-  if (f.includes("btl") || f.includes("assignment") || f.includes("bai_tap_lon") || f.includes("do_an")) {
-    return {
-      label: "Điểm bài tập lớn / Đồ án môn học",
-      tip: "Mức độ hoàn thành bài tập thực hành nhóm",
-    };
-  }
-  if (f.includes("lab") || f.includes("thuc_hanh")) {
-    return {
-      label: "Điểm thực hành thí nghiệm",
-      tip: "Điểm hoàn thành các bài thí nghiệm bắt buộc",
-    };
-  }
-  if (f.includes("quiz") || f.includes("chuyen_can") || f.includes("attendance")) {
-    return {
-      label: "Điểm chuyên cần & Kiểm tra nhỏ",
-      tip: "Tỷ lệ đi học và tham gia xây dựng bài",
-    };
-  }
-  if (f.includes("passed_credits") || f.includes("credits_ratio") || f.includes("tin_chi_dat")) {
-    return {
-      label: "Tỷ lệ tích lũy tín chỉ thành công",
-      tip: "Tỷ lệ tín chỉ đậu so với tổng tín chỉ đăng ký",
-    };
-  }
-  if (f.includes("failed_credits") || f.includes("tin_chi_rot") || f.includes("so_mon_rot")) {
-    return {
-      label: "Lịch sử tín chỉ rớt trước đây",
-      tip: "Số lượng tín chỉ từng bị trượt ở các kỳ trước",
-    };
-  }
-  if (f.includes("course_difficulty") || f.includes("difficulty") || f.includes("do_kho")) {
-    return {
-      label: "Độ khó học thuật của môn học",
-      tip: "Khối lượng kiến thức và tỷ lệ trượt lịch sử của môn",
-    };
-  }
-  if (f.includes("prereq") || f.includes("tien_quyet") || f.includes("mon_tien_quyet")) {
-    return {
-      label: "Nền tảng môn học tiên quyết",
-      tip: "Kết quả học tập các môn làm nền tảng",
-    };
-  }
-  if (f.includes("credit_load") || f.includes("so_tin_chi_ky") || f.includes("attempted_credits")) {
-    return {
-      label: "Khối lượng tín chỉ học kỳ này",
-      tip: "Áp lực thời gian và số môn đang học đồng thời",
-    };
-  }
-  if (f.includes("class_fail_rate") || f.includes("ty_le_rot_lop")) {
-    return {
-      label: "Tỷ lệ trượt trung bình của lớp",
-      tip: "Thống kê mức độ cạnh tranh điểm số của nhóm lớp",
-    };
-  }
-  if (f.includes("lecturer") || f.includes("giang_vien")) {
-    return {
-      label: "Mức độ khắt khe của giảng viên",
-      tip: "Tương quan đánh giá lịch sử của giảng viên phụ trách",
-    };
-  }
-  if (f.includes("gpa_major") || f.includes("chuyen_nganh")) {
-    return {
-      label: "Điểm các môn chuyên ngành",
-      tip: "Điểm trung bình các môn cốt lõi ngành học",
-    };
-  }
-
-  // Fallback: Convert snake_case to readable Title Case
-  const readable = rawFeature
-    .replace(/_/g, " ")
-    .replace(/([A-Z])/g, " $1")
-    .replace(/^./, (str) => str.toUpperCase())
-    .trim();
-
-  return { label: readable };
-}
 
 /**
  * Calculate required final exam scores to meet target grades

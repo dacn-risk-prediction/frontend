@@ -6,12 +6,19 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthUser } from "@/features/auth";
+import { formatFeatureName } from "@/lib/shap-features";
 import { cn } from "@/lib/utils";
-import type { Enrollment } from "@/types";
+import type {
+  AppointmentStatus,
+  ClassStudentPrediction,
+  Enrollment,
+} from "@/types";
 import {
+  AlertTriangle,
   Building2,
   Calendar,
   CalendarCheck,
+  CheckCheck,
   CheckCircle2,
   CheckSquare,
   Clock,
@@ -28,6 +35,7 @@ import {
   UserCheck,
   Users,
   Video,
+  XCircle,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -35,6 +43,7 @@ import { toast } from "sonner";
 import {
   useActiveSemester,
   useAllClassesEnrollments,
+  useAllClassesPredictions,
   useLecturerCurrentClasses,
 } from "../api/lecturer-api";
 import {
@@ -42,6 +51,7 @@ import {
   useCreateOrGetAdvisingSession,
   useSessionMessages,
   useSendMessage,
+  useMarkSessionRead,
   useSessionAppointments,
   useCreateAppointment,
   useUpdateAppointmentStatus,
@@ -71,58 +81,41 @@ export interface StudentAdvisingProfile {
   riskLevel: "CRITICAL" | "WARNING" | "SAFE";
   riskReason: string;
   failProbability: number;
+  predictedScore10: number | null;
+  predictedLetterGrade: string | null;
+  isAiPrediction: boolean;
   rawEnrollment?: Enrollment;
 }
 
 export interface DirectMessage {
   id: string;
-  advisorId: string;
   sender: "student" | "advisor";
   senderName: string;
   content: string;
   timestamp: string;
-  isQuickRequest?: boolean;
+  messageType: string;
+  isRead?: boolean;
 }
 
 export interface BookingAppointment {
   id: string;
-  advisorId: string;
-  advisorName: string;
   subject: string;
   timeSlot: string;
   meetingType: "OFFICE" | "ONLINE";
   notes?: string;
-  status: "CONFIRMED" | "PENDING" | "COMPLETED";
+  status: AppointmentStatus;
   createdAt: string;
   location: string;
 }
 
 export interface ActionPlanTask {
   id: string;
-  advisorId: string;
   title: string;
   description?: string;
   deadline: string;
   priority: "HIGH" | "MEDIUM" | "NORMAL";
   completed: boolean;
 }
-
-// ==========================================
-// Sample / Fallback Name Resolvers
-// ==========================================
-
-const SAMPLE_STUDENT_NAMES: Record<string, string> = {
-  "2011928": "Nguyễn Văn An",
-  "2028899": "Trần Thị Mai Anh",
-  "2010112": "Lê Hoàng Bảo",
-  "2010245": "Phạm Quốc Dũng",
-  "2010356": "Đỗ Minh Đức",
-  "2010489": "Vũ Hải Đăng",
-  "2010512": "Bùi Hoàng Nam",
-  "2010678": "Ngô Phương Thảo",
-  "2010789": "Đinh Tiến Đạt",
-  "2010890": "Trịnh Mỹ Linh",
-};
 
 function getInitials(name: string): string {
   const parts = name.trim().split(" ");
@@ -132,119 +125,25 @@ function getInitials(name: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
-function getInitialMessages(
-  student: StudentAdvisingProfile | null,
-  lecturerName: string,
-): DirectMessage[] {
-  if (!student) return [];
-  try {
-    const saved = localStorage.getItem(
-      `aurora_advising_messages_${student.studentId}`,
-    );
-    if (saved) return JSON.parse(saved);
-  } catch {
-    // ignore
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "response" in err &&
+    typeof (err as { response?: { data?: { detail?: unknown } } }).response
+      ?.data?.detail === "string"
+  ) {
+    return (err as { response: { data: { detail: string } } }).response.data
+      .detail;
   }
-  return [
-    {
-      id: `msg-seed-1-${student.studentId}`,
-      advisorId: `course-${student.courseCode}`,
-      sender: "advisor",
-      senderName: lecturerName,
-      content: `Chào em ${student.studentName}, Thầy đã xem kết quả bài thi giữa kỳ môn ${student.courseCode} của em. Em cần chú ý tập trung ôn tập các nội dung trọng tâm để cải thiện điểm số ở kỳ thi cuối kỳ nhé.`,
-      timestamp: "Hôm qua 15:30",
-    },
-    {
-      id: `msg-seed-2-${student.studentId}`,
-      advisorId: `course-${student.courseCode}`,
-      sender: "student",
-      senderName: student.studentName,
-      content: `Dạ em cảm ơn Thầy ạ. Thầy cho em xin lời khuyên về phương án gỡ điểm và tài liệu bài tập bổ trợ cho phần thi cuối kỳ với ạ.`,
-      timestamp: "Hôm qua 16:10",
-    },
-  ];
-}
-
-function getInitialBookings(
-  student: StudentAdvisingProfile | null,
-  lecturerName: string,
-): BookingAppointment[] {
-  if (!student) return [];
-  try {
-    const saved = localStorage.getItem(
-      `aurora_advising_bookings_${student.studentId}`,
-    );
-    if (saved) return JSON.parse(saved);
-  } catch {
-    // ignore
-  }
-  return [
-    {
-      id: `book-seed-${student.studentId}`,
-      advisorId: `course-${student.courseCode}`,
-      advisorName: lecturerName,
-      subject: `Tư vấn phương án gỡ điểm môn ${student.courseCode}`,
-      timeSlot: "Thứ Ba: 14:00 - 15:30 (Văn phòng bộ môn)",
-      meetingType: "OFFICE",
-      notes: `Sinh viên cần trao đổi về các câu hỏi bị trừ điểm trong bài thi giữa kỳ môn ${student.courseCode}.`,
-      status: student.riskLevel === "CRITICAL" ? "PENDING" : "CONFIRMED",
-      createdAt: "Hôm nay",
-      location: "P.503 Nhà H6, Cơ sở Dĩ An",
-    },
-  ];
-}
-
-function getInitialTasks(
-  student: StudentAdvisingProfile | null,
-): ActionPlanTask[] {
-  if (!student) return [];
-  try {
-    const saved = localStorage.getItem(
-      `aurora_advising_actionplan_${student.studentId}`,
-    );
-    if (saved) return JSON.parse(saved);
-  } catch {
-    // ignore
-  }
-  return [
-    {
-      id: `task-1-${student.studentId}`,
-      advisorId: `course-${student.courseCode}`,
-      title: `Rà soát lại bài kiểm tra giữa kỳ ${student.courseCode}`,
-      description:
-        "Xem lại phần câu hỏi lý thuyết và viết lại bài giải đúng vào vở bài tập.",
-      deadline: "Hạn chót: 25/11/2026",
-      priority: "HIGH",
-      completed: student.riskLevel === "SAFE",
-    },
-    {
-      id: `task-2-${student.studentId}`,
-      advisorId: `course-${student.courseCode}`,
-      title: "Hoàn thành bài tập bổ trợ trên LMS tuần 10 & 11",
-      description:
-        "Đạt điểm tối thiểu 8.0/10 ở các bài quiz trắc nghiệm để chuẩn bị thi cuối kỳ.",
-      deadline: "Hạn chót: 28/11/2026",
-      priority: "HIGH",
-      completed: false,
-    },
-    {
-      id: `task-3-${student.studentId}`,
-      advisorId: `course-${student.courseCode}`,
-      title: "Gặp trợ giảng phụ đạo hướng dẫn Bài tập lớn",
-      description:
-        "Tham gia buổi phụ đạo hàng tuần tại phòng Lab để hoàn thiện phần mô phỏng.",
-      deadline: "Hạn chót: 30/11/2026",
-      priority: "MEDIUM",
-      completed: false,
-    },
-  ];
+  return fallback;
 }
 
 export const LecturerInterventionsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: user } = useAuthUser();
-  const lecturerId = user?.user_code || user?.id || "LEC1001";
-  const lecturerName = user?.name || "TS. Giảng viên Phụ trách";
+  const lecturerId = user?.user_code || user?.id || "";
+  const lecturerName = user?.name || "Giảng viên Phụ trách";
 
   const {
     data: classes = [],
@@ -256,23 +155,41 @@ export const LecturerInterventionsPage = () => {
 
   const classIds = useMemo(() => classes.map((c) => c.class_id), [classes]);
   const enrollmentsQueries = useAllClassesEnrollments(classIds);
+  const predictionsQueries = useAllClassesPredictions(classIds, true);
+
   const isLoadingEnrollments = enrollmentsQueries.some((q) => q.isLoading);
+  const isLoadingPredictions = predictionsQueries.some((q) => q.isLoading);
 
   const allEnrollments = useMemo(() => {
     return enrollmentsQueries.flatMap((q) => q.data ?? []);
   }, [enrollmentsQueries]);
 
-  // Active Tab state
-  const [activeTab, setActiveTab] = useState<LecturerAdvisingTab>(() => {
-    const tabParam = searchParams.get("tab");
-    if (tabParam === "bookings" || tabParam === "action-plan") return tabParam;
-    return "messages";
-  });
+  // Build AI prediction map keyed by `${class_id}::${student_id}`
+  const { predictionMap, hasAnyAiPrediction } = useMemo(() => {
+    const map = new Map<string, ClassStudentPrediction>();
+    let anyLoaded = false;
+    for (const q of predictionsQueries) {
+      const clsPred = q.data;
+      if (!clsPred) continue;
+      anyLoaded = true;
+      for (const s of clsPred.students ?? []) {
+        map.set(`${clsPred.class_id}::${s.student_id}`, s);
+      }
+    }
+    return { predictionMap: map, hasAnyAiPrediction: anyLoaded };
+  }, [predictionsQueries]);
+
+  // Active Tab derived from URL search params (keeps NotificationBell clicks in sync)
+  const tabParam = searchParams.get("tab");
+  const activeTab: LecturerAdvisingTab =
+    tabParam === "bookings" || tabParam === "action-plan"
+      ? tabParam
+      : "messages";
 
   // Filter States
   const [filterRisk, setFilterRisk] = useState<
-    "ALL" | "CRITICAL" | "WARNING" | "BOOKING"
-  >("CRITICAL");
+    "ALL" | "CRITICAL" | "WARNING" | "SESSIONS"
+  >("ALL");
   const [selectedClassId, setSelectedClassId] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -285,187 +202,124 @@ export const LecturerInterventionsPage = () => {
     return map;
   }, [classes]);
 
-  // Derived Students List
+  // Derived Students List (prioritizing real AI predictions, falling back to enrollment heuristic only if AI offline)
   const students: StudentAdvisingProfile[] = useMemo(() => {
-    if (allEnrollments.length > 0) {
-      return allEnrollments.map((enr) => {
-        const cls = classMap.get(enr.class_id);
-        const name =
-          SAMPLE_STUDENT_NAMES[enr.student_id] || `Sinh viên ${enr.student_id}`;
+    const list: StudentAdvisingProfile[] = allEnrollments.map((enr) => {
+      const cls = classMap.get(enr.class_id);
+      const pred = predictionMap.get(`${enr.class_id}::${enr.student_id}`);
 
-        let riskLevel: "CRITICAL" | "WARNING" | "SAFE" = "SAFE";
-        let riskReason = "Phong độ học tập ổn định, rủi ro rớt môn thấp.";
-        let failProbability = 0.12;
+      if (pred) {
+        const riskLevel: "CRITICAL" | "WARNING" | "SAFE" =
+          pred.risk_level === "HIGH" || pred.is_at_risk
+            ? "CRITICAL"
+            : pred.risk_level === "MEDIUM"
+              ? "WARNING"
+              : "SAFE";
 
-        if (enr.giua_ky !== null && enr.giua_ky < 4.0) {
-          riskLevel = "CRITICAL";
-          riskReason = `Điểm thi giữa kỳ ${enr.giua_ky}/10 (dưới ngưỡng qua môn 4.0).`;
-          failProbability = Math.max(
-            0.65,
-            Number(((10 - enr.giua_ky) / 10).toFixed(2)),
-          );
-        } else if (enr.retaken) {
-          riskLevel =
-            enr.giua_ky !== null && enr.giua_ky < 5.0 ? "CRITICAL" : "WARNING";
-          riskReason = "Học phần đăng ký học lại sau khi trượt ở các kỳ trước.";
-          failProbability = 0.58;
-        } else if (enr.lab !== null && enr.lab < 4.0) {
-          riskLevel = "WARNING";
-          riskReason = `Điểm thực hành Lab đạt ${enr.lab}/10, cần hoàn thành bù.`;
-          failProbability = 0.45;
-        } else if (enr.giua_ky !== null && enr.giua_ky < 5.5) {
-          riskLevel = "WARNING";
-          riskReason = `Điểm giữa kỳ ${enr.giua_ky}/10 ở mức tiệm cận, cần củng cố điểm cuối kỳ.`;
-          failProbability = 0.38;
-        }
+        const topFactor = pred.top_shap_factors?.[0];
+        const riskReason = topFactor
+          ? `${formatFeatureName(topFactor.feature).label}: ${topFactor.description}`
+          : riskLevel === "CRITICAL"
+            ? "Mô hình AI cảnh báo xác suất rớt môn cao, cần can thiệp sớm."
+            : riskLevel === "WARNING"
+              ? "Mô hình AI đánh giá ở ngưỡng cần theo dõi và củng cố điểm cuối kỳ."
+              : "Phong độ học tập ổn định theo đánh giá của mô hình AI.";
 
         return {
           studentId: enr.student_id,
-          studentName: name,
+          studentName: pred.student_name || `Sinh viên ${enr.student_id}`,
           email: `${enr.student_id}@hcmut.edu.vn`,
-          courseCode: enr.course_code || cls?.course_code || "CO2007",
-          courseName: cls?.course_name || "Kiến trúc Máy tính",
+          courseCode: enr.course_code || cls?.course_code || "",
+          courseName: cls?.course_name || enr.course_code || "",
           classId: enr.class_id,
-          classGroup: cls?.class_group || "CC01",
+          classGroup: cls?.class_group || "",
           giuaKy: enr.giua_ky,
           lab: enr.lab,
           btl: enr.btl,
           retaken: enr.retaken,
           riskLevel,
           riskReason,
-          failProbability,
+          failProbability: pred.fail_probability,
+          predictedScore10: pred.predicted_score10,
+          predictedLetterGrade: pred.predicted_letter_grade,
+          isAiPrediction: true,
           rawEnrollment: enr,
         };
-      });
-    }
+      }
 
-    // Realistic Fallback Dataset when server returns empty
-    return [
-      {
-        studentId: "2011928",
-        studentName: "Nguyễn Văn An",
-        email: "2011928@hcmut.edu.vn",
-        courseCode: "CO2007",
-        courseName: "Kiến trúc Máy tính",
-        classId: "HK261_CO2007_CC01",
-        classGroup: "CC01",
-        giuaKy: 3.2,
-        lab: 3.5,
-        btl: 5.5,
-        retaken: true,
-        riskLevel: "CRITICAL",
-        riskReason:
-          "Điểm thi giữa kỳ 3.2/10 và là học phần học lại. Nguy cơ trượt môn cao.",
-        failProbability: 0.72,
-      },
-      {
-        studentId: "2028899",
-        studentName: "Trần Thị Mai Anh",
-        email: "2028899@hcmut.edu.vn",
-        courseCode: "CO2007",
-        courseName: "Kiến trúc Máy tính",
-        classId: "HK261_CO2007_CC01",
-        classGroup: "CC01",
-        giuaKy: 4.5,
-        lab: 7.0,
-        btl: 6.0,
-        retaken: false,
-        riskLevel: "WARNING",
-        riskReason:
-          "Điểm giữa kỳ 4.5/10 tiệm cận ngưỡng rủi ro, cần hỗ trợ ôn tập cuối kỳ.",
-        failProbability: 0.42,
-      },
-      {
-        studentId: "2010112",
-        studentName: "Lê Hoàng Bảo",
-        email: "2010112@hcmut.edu.vn",
-        courseCode: "CO2017",
-        courseName: "Hệ điều hành",
-        classId: "HK261_CO2017_CC02",
-        classGroup: "CC02",
-        giuaKy: 2.5,
-        lab: 4.0,
-        btl: 4.5,
-        retaken: true,
-        riskLevel: "CRITICAL",
-        riskReason:
-          "Điểm giữa kỳ 2.5/10 (dưới ngưỡng liệt) và nợ tiến độ thực hành xv6 kernel.",
-        failProbability: 0.85,
-      },
-      {
-        studentId: "2010245",
-        studentName: "Phạm Quốc Dũng",
-        email: "2010245@hcmut.edu.vn",
-        courseCode: "CO2007",
-        courseName: "Kiến trúc Máy tính",
-        classId: "HK261_CO2007_CC01",
-        classGroup: "CC01",
-        giuaKy: 7.8,
-        lab: 8.5,
-        btl: 8.0,
-        retaken: false,
-        riskLevel: "SAFE",
-        riskReason:
-          "Phong độ học tập tốt, tiến độ thực hành và bài tập lớn đạt chuẩn.",
-        failProbability: 0.08,
-      },
-      {
-        studentId: "2010356",
-        studentName: "Đỗ Minh Đức",
-        email: "2010356@hcmut.edu.vn",
-        courseCode: "CO2017",
-        courseName: "Hệ điều hành",
-        classId: "HK261_CO2017_CC02",
-        classGroup: "CC02",
-        giuaKy: 5.0,
-        lab: 5.5,
-        btl: 6.5,
-        retaken: false,
-        riskLevel: "WARNING",
-        riskReason:
-          "Điểm thi giữa kỳ ở mức trung bình, cần duy trì chuyên cần.",
-        failProbability: 0.32,
-      },
-      {
-        studentId: "2010489",
-        studentName: "Vũ Hải Đăng",
-        email: "2010489@hcmut.edu.vn",
-        courseCode: "CO2007",
-        courseName: "Kiến trúc Máy tính",
-        classId: "HK261_CO2007_CC01",
-        classGroup: "CC01",
-        giuaKy: 8.5,
-        lab: 9.0,
-        btl: 9.0,
-        retaken: false,
-        riskLevel: "SAFE",
-        riskReason: "Học lực xuất sắc, rủi ro rớt môn dưới 5%.",
-        failProbability: 0.04,
-      },
-    ];
-  }, [allEnrollments, classMap]);
+      // Heuristic fallback when AI model service is temporarily offline
+      let riskLevel: "CRITICAL" | "WARNING" | "SAFE" = "SAFE";
+      let riskReason = "Chưa có cảnh báo từ điểm thành phần hiện tại.";
+      let failProbability = 0.1;
 
-  // Selected Student state
-  const [selectedStudentId, setSelectedStudentId] = useState<string>(() => {
-    return searchParams.get("student") || students[0]?.studentId || "2011928";
-  });
+      if (enr.giua_ky !== null && enr.giua_ky < 4.0) {
+        riskLevel = "CRITICAL";
+        riskReason = `Điểm thi giữa kỳ ${enr.giua_ky}/10 (dưới ngưỡng 4.0).`;
+        failProbability = Math.max(
+          0.65,
+          Number(((10 - enr.giua_ky) / 10).toFixed(2)),
+        );
+      } else if (enr.retaken) {
+        riskLevel =
+          enr.giua_ky !== null && enr.giua_ky < 5.0 ? "CRITICAL" : "WARNING";
+        riskReason = "Học phần đăng ký học lại.";
+        failProbability = 0.55;
+      } else if (enr.lab !== null && enr.lab < 4.0) {
+        riskLevel = "WARNING";
+        riskReason = `Điểm thực hành Lab đạt ${enr.lab}/10, cần hoàn thành bù.`;
+        failProbability = 0.42;
+      } else if (enr.giua_ky !== null && enr.giua_ky < 5.5) {
+        riskLevel = "WARNING";
+        riskReason = `Điểm giữa kỳ ${enr.giua_ky}/10 ở mức tiệm cận, cần củng cố.`;
+        failProbability = 0.35;
+      }
+
+      return {
+        studentId: enr.student_id,
+        studentName: `Sinh viên ${enr.student_id}`,
+        email: `${enr.student_id}@hcmut.edu.vn`,
+        courseCode: enr.course_code || cls?.course_code || "",
+        courseName: cls?.course_name || enr.course_code || "",
+        classId: enr.class_id,
+        classGroup: cls?.class_group || "",
+        giuaKy: enr.giua_ky,
+        lab: enr.lab,
+        btl: enr.btl,
+        retaken: enr.retaken,
+        riskLevel,
+        riskReason,
+        failProbability,
+        predictedScore10: null,
+        predictedLetterGrade: null,
+        isAiPrediction: false,
+        rawEnrollment: enr,
+      };
+    });
+
+    return list.sort((a, b) => b.failProbability - a.failProbability);
+  }, [allEnrollments, classMap, predictionMap]);
+
+  // Selected Student derived directly from URL search params (?student=&course=)
+  const studentParam = searchParams.get("student") || "";
+  const courseParam = searchParams.get("course") || "";
 
   const selectedStudent = useMemo(() => {
-    const found = students.find((s) => s.studentId === selectedStudentId);
-    return found || students[0] || null;
-  }, [students, selectedStudentId]);
-
-  const handleSelectStudent = (id: string) => {
-    setSelectedStudentId(id);
-    setSearchParams((prev) => {
-      const p = new URLSearchParams(prev);
-      p.set("student", id);
-      return p;
-    });
-  };
+    if (studentParam) {
+      if (courseParam) {
+        const exact = students.find(
+          (s) =>
+            s.studentId === studentParam &&
+            s.courseCode.toUpperCase() === courseParam.toUpperCase(),
+        );
+        if (exact) return exact;
+      }
+      const byId = students.find((s) => s.studentId === studentParam);
+      if (byId) return byId;
+    }
+    return students[0] || null;
+  }, [students, studentParam, courseParam]);
 
   const handleTabChange = (tab: LecturerAdvisingTab) => {
-    setActiveTab(tab);
     setSearchParams((prev) => {
       const p = new URLSearchParams(prev);
       p.set("tab", tab);
@@ -476,8 +330,34 @@ export const LecturerInterventionsPage = () => {
   // ==========================================
   // Backend Advising Sessions & Queries
   // ==========================================
-  const { data: serverSessions } = useAdvisingSessions();
+  const { data: serverSessions } = useAdvisingSessions(Boolean(lecturerId));
   const createOrGetSessionMutation = useCreateOrGetAdvisingSession();
+  const markSessionReadMutation = useMarkSessionRead();
+
+  const handleSelectStudent = (student: StudentAdvisingProfile) => {
+    const matched = serverSessions?.find(
+      (s) =>
+        s.student_id === student.studentId &&
+        s.course_code === student.courseCode,
+    );
+    if (matched && matched.unread_count > 0) {
+      markSessionReadMutation.mutate(matched.id);
+    }
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      p.set("student", student.studentId);
+      p.set("course", student.courseCode);
+      return p;
+    });
+  };
+
+  const sessionMapByStudentCourse = useMemo(() => {
+    const map = new Map<string, (typeof serverSessions extends Array<infer T> | undefined ? T : never)>();
+    for (const s of serverSessions ?? []) {
+      map.set(`${s.student_id}::${s.course_code}`, s);
+    }
+    return map;
+  }, [serverSessions]);
 
   const activeSession = useMemo(() => {
     if (!serverSessions || !selectedStudent) return null;
@@ -485,177 +365,141 @@ export const LecturerInterventionsPage = () => {
       serverSessions.find(
         (s) =>
           s.student_id === selectedStudent.studentId &&
+          s.course_code === selectedStudent.courseCode &&
+          s.semester_code === activeSemesterCode,
+      ) ??
+      serverSessions.find(
+        (s) =>
+          s.student_id === selectedStudent.studentId &&
           s.course_code === selectedStudent.courseCode,
-      ) || null
+      ) ??
+      null
     );
-  }, [serverSessions, selectedStudent]);
+  }, [serverSessions, selectedStudent, activeSemesterCode]);
 
   const activeSessionId = activeSession?.id;
 
-  // Real-time Messages from Backend
-  const { data: serverMessages } = useSessionMessages(activeSessionId);
+  // Real-time Messages from Backend (GET uses mark_read=false so polling never wipes unread state)
+  const { data: serverMessages, isLoading: isLoadingMessages } =
+    useSessionMessages(activeSessionId, 50, 0, activeTab === "messages");
   const sendMessageMutation = useSendMessage(activeSessionId);
 
   // Real-time Appointments from Backend
-  const { data: serverAppointments } = useSessionAppointments(activeSessionId);
+  const { data: serverAppointments, isLoading: isLoadingAppointments } =
+    useSessionAppointments(activeSessionId);
   const createAppointmentMutation = useCreateAppointment(activeSessionId);
   const updateAppointmentStatusMutation =
     useUpdateAppointmentStatus(activeSessionId);
 
   // Real-time Tasks from Backend
-  const { data: serverTasks } = useSessionTasks(activeSessionId);
+  const { data: serverTasks, isLoading: isLoadingTasks } =
+    useSessionTasks(activeSessionId);
   const createTaskMutation = useCreateTask(activeSessionId);
   const toggleTaskMutation = useToggleTask(activeSessionId);
 
-  // 1. Messages State for current selected student (fallback / optimistic)
-  const [messagesMap, setMessagesMap] = useState<
-    Record<string, DirectMessage[]>
-  >({});
-
-  const messages: DirectMessage[] = useMemo(() => {
-    if (serverMessages && serverMessages.length > 0 && selectedStudent) {
-      return serverMessages.map((m) => ({
-        id: m.id,
-        advisorId: `course-${selectedStudent.courseCode}`,
-        sender: (m.sender_role.toLowerCase() === "student"
-          ? "student"
-          : "advisor") as "student" | "advisor",
-        senderName: m.sender_name,
-        content: m.content,
-        timestamp: new Date(m.created_at).toLocaleTimeString("vi-VN", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        isQuickRequest: false,
-      }));
-    }
-    if (!selectedStudent) return [];
-    return (
-      messagesMap[selectedStudent.studentId] ??
-      getInitialMessages(selectedStudent, lecturerName)
-    );
-  }, [serverMessages, selectedStudent, messagesMap, lecturerName]);
-
-  const saveMessages = (nextMessages: DirectMessage[]) => {
-    if (!selectedStudent) return;
-    setMessagesMap((prev) => ({
-      ...prev,
-      [selectedStudent.studentId]: nextMessages,
-    }));
-    try {
-      localStorage.setItem(
-        `aurora_advising_messages_${selectedStudent.studentId}`,
-        JSON.stringify(nextMessages),
-      );
-    } catch {
-      // ignore
-    }
+  const ensureSessionId = async (
+    student: StudentAdvisingProfile,
+  ): Promise<string> => {
+    if (activeSessionId) return activeSessionId;
+    const created = await createOrGetSessionMutation.mutateAsync({
+      student_id: student.studentId,
+      course_code: student.courseCode,
+      semester_code: activeSemesterCode,
+      topic: `Cố vấn học vụ môn ${student.courseCode}`,
+      risk_level: student.riskLevel,
+      lecturer_id: lecturerId,
+    });
+    return created.id;
   };
+
+  // 1. Messages from Backend
+  const messages: DirectMessage[] = useMemo(() => {
+    if (!activeSessionId || !serverMessages) return [];
+    return serverMessages.map((m) => ({
+      id: m.id,
+      sender:
+        m.sender_role.toLowerCase() === "student" ? "student" : "advisor",
+      senderName: m.sender_name,
+      content: m.content,
+      timestamp: new Date(m.created_at).toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      messageType: m.message_type,
+      isRead: m.is_read,
+    }));
+  }, [activeSessionId, serverMessages]);
 
   const [chatInput, setChatInput] = useState("");
 
   const handleSendMessage = async (contentToSend?: string) => {
-    const text = (contentToSend || chatInput).trim();
+    const text = (contentToSend ?? chatInput).trim();
     if (!text || !selectedStudent) return;
 
-    const newMsg: DirectMessage = {
-      id: `msg-${Date.now()}`,
-      advisorId: `course-${selectedStudent.courseCode}`,
-      sender: "advisor",
-      senderName: lecturerName,
-      content: text,
-      timestamp: "Vừa xong",
-    };
-
-    const next = [...messages, newMsg];
-    saveMessages(next);
-    if (!contentToSend) setChatInput("");
-
-    // Send to Backend
     try {
-      let targetSessionId = activeSessionId;
-      if (!targetSessionId) {
-        const created = await createOrGetSessionMutation.mutateAsync({
-          student_id: selectedStudent.studentId,
-          course_code: selectedStudent.courseCode,
-          topic: `Cố vấn học vụ môn ${selectedStudent.courseCode}`,
-          risk_level: selectedStudent.riskLevel,
-          lecturer_id: lecturerId,
-        });
-        targetSessionId = created.id;
-      }
-      if (targetSessionId) {
-        await sendMessageMutation.mutateAsync({
+      const targetSessionId = await ensureSessionId(selectedStudent);
+      await sendMessageMutation.mutateAsync({
+        sessionId: targetSessionId,
+        payload: {
           content: text,
           message_type: "NOTICE",
-        });
-      }
-    } catch {
-      // Fallback keeps local message
-    }
-
-    toast.success(
-      `Đã gửi lời dặn dò tới sinh viên ${selectedStudent.studentName}!`,
-    );
-  };
-
-  // 2. Bookings State for current selected student
-  const [appointmentsMap, setAppointmentsMap] = useState<
-    Record<string, BookingAppointment[]>
-  >({});
-
-  const appointments = useMemo(() => {
-    if (serverAppointments && serverAppointments.length > 0 && selectedStudent) {
-      return serverAppointments.map((a) => ({
-        id: a.id,
-        advisorId: `course-${selectedStudent.courseCode}`,
-        advisorName: lecturerName,
-        subject: a.subject,
-        timeSlot: a.time_slot,
-        meetingType: a.meeting_type,
-        notes: a.notes || undefined,
-        status: a.status as "CONFIRMED" | "PENDING" | "COMPLETED",
-        createdAt: new Date(a.created_at).toLocaleDateString("vi-VN"),
-        location: a.location,
-      }));
-    }
-    if (!selectedStudent) return [];
-    return (
-      appointmentsMap[selectedStudent.studentId] ??
-      getInitialBookings(selectedStudent, lecturerName)
-    );
-  }, [serverAppointments, selectedStudent, appointmentsMap, lecturerName]);
-
-  const saveAppointments = (next: BookingAppointment[]) => {
-    if (!selectedStudent) return;
-    setAppointmentsMap((prev) => ({
-      ...prev,
-      [selectedStudent.studentId]: next,
-    }));
-    try {
-      localStorage.setItem(
-        `aurora_advising_bookings_${selectedStudent.studentId}`,
-        JSON.stringify(next),
-      );
-    } catch {
-      // ignore
-    }
-  };
-
-  const handleConfirmBooking = (bookingId: string) => {
-    const next = appointments.map((b) =>
-      b.id === bookingId ? { ...b, status: "CONFIRMED" as const } : b,
-    );
-    saveAppointments(next);
-
-    if (activeSessionId) {
-      updateAppointmentStatusMutation.mutate({
-        appointmentId: bookingId,
-        payload: { status: "CONFIRMED" },
+        },
       });
+      if ((activeSession?.unread_count ?? 0) > 0) {
+        markSessionReadMutation.mutate(targetSessionId);
+      }
+      if (!contentToSend) setChatInput("");
+      toast.success(
+        `Đã gửi lời dặn dò tới sinh viên ${selectedStudent.studentName}!`,
+      );
+    } catch (err) {
+      toast.error(
+        extractErrorMessage(
+          err,
+          "Không thể gửi tin nhắn. Vui lòng kiểm tra kết nối máy chủ.",
+        ),
+      );
     }
+  };
 
-    toast.success("Đã xác nhận lịch tiếp sinh viên thành công!");
+  // 2. Appointments from Backend
+  const appointments: BookingAppointment[] = useMemo(() => {
+    if (!activeSessionId || !serverAppointments) return [];
+    return serverAppointments.map((a) => ({
+      id: a.id,
+      subject: a.subject,
+      timeSlot: a.time_slot,
+      meetingType: a.meeting_type,
+      notes: a.notes || undefined,
+      status: a.status,
+      createdAt: new Date(a.created_at).toLocaleDateString("vi-VN"),
+      location: a.location,
+    }));
+  }, [activeSessionId, serverAppointments]);
+
+  const handleUpdateBookingStatus = async (
+    appointmentId: string,
+    status: AppointmentStatus,
+  ) => {
+    if (!activeSessionId) return;
+    try {
+      await updateAppointmentStatusMutation.mutateAsync({
+        sessionId: activeSessionId,
+        appointmentId,
+        payload: { status },
+      });
+      if (status === "CONFIRMED") {
+        toast.success("Đã xác nhận lịch tiếp sinh viên!");
+      } else if (status === "COMPLETED") {
+        toast.success("Đã đánh dấu hoàn thành buổi tư vấn.");
+      } else if (status === "CANCELLED") {
+        toast.info("Đã hủy lịch hẹn.");
+      }
+    } catch (err) {
+      toast.error(
+        extractErrorMessage(err, "Không thể cập nhật trạng thái lịch hẹn."),
+      );
+    }
   };
 
   // Form for Lecturer Proactively scheduling office hours
@@ -667,112 +511,66 @@ export const LecturerInterventionsPage = () => {
 
   const handleCreateProactiveAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedStudent) return;
+    if (!selectedStudent || !newSlotInput.trim()) return;
 
     const location =
       newMeetingType === "OFFICE"
         ? "P.503 Nhà H6, Cơ sở Dĩ An"
         : "Google Meet: meet.google.com/adv-hcmut-support";
 
-    const newBooking: BookingAppointment = {
-      id: `book-${Date.now()}`,
-      advisorId: `course-${selectedStudent.courseCode}`,
-      advisorName: lecturerName,
-      subject: `Lịch hẹn can thiệp học vụ môn ${selectedStudent.courseCode}`,
-      timeSlot: `${newSlotInput} (${newMeetingType === "OFFICE" ? "Trực tiếp" : "Online"})`,
-      meetingType: newMeetingType,
-      notes:
-        newAppointmentNotes ||
-        "Giảng viên mời sinh viên lên trao đổi kết quả bài thi giữa kỳ.",
-      status: "CONFIRMED",
-      createdAt: "Vừa xong",
-      location,
-    };
-
-    saveAppointments([newBooking, ...appointments]);
-    setNewAppointmentNotes("");
-
-    // Call Backend
     try {
-      let targetSessionId = activeSessionId;
-      if (!targetSessionId) {
-        const created = await createOrGetSessionMutation.mutateAsync({
-          student_id: selectedStudent.studentId,
-          course_code: selectedStudent.courseCode,
-          topic: `Cố vấn học vụ môn ${selectedStudent.courseCode}`,
-          risk_level: selectedStudent.riskLevel,
-          lecturer_id: lecturerId,
-        });
-        targetSessionId = created.id;
-      }
-      if (targetSessionId) {
-        await createAppointmentMutation.mutateAsync({
+      const targetSessionId = await ensureSessionId(selectedStudent);
+      await createAppointmentMutation.mutateAsync({
+        sessionId: targetSessionId,
+        payload: {
           subject: `Lịch hẹn can thiệp học vụ môn ${selectedStudent.courseCode}`,
-          time_slot: `${newSlotInput} (${newMeetingType === "OFFICE" ? "Trực tiếp" : "Online"})`,
+          time_slot: `${newSlotInput.trim()} (${newMeetingType === "OFFICE" ? "Trực tiếp" : "Online"})`,
           meeting_type: newMeetingType,
           location,
-          notes: newAppointmentNotes || null,
-        });
-      }
-    } catch {
-      // Fallback
-    }
-
-    toast.success(
-      `Đã xếp lịch hẹn tiếp sinh viên ${selectedStudent.studentName}!`,
-    );
-  };
-
-  // 3. Action Plan Tasks for current selected student
-  const [tasksMap, setTasksMap] = useState<Record<string, ActionPlanTask[]>>(
-    {},
-  );
-
-  const actionTasks = useMemo(() => {
-    if (serverTasks && serverTasks.length > 0 && selectedStudent) {
-      return serverTasks.map((t) => ({
-        id: t.id,
-        advisorId: `course-${selectedStudent.courseCode}`,
-        title: t.title,
-        description: t.description || undefined,
-        deadline: t.deadline,
-        priority: t.priority,
-        completed: t.completed,
-      }));
-    }
-    if (!selectedStudent) return [];
-    return (
-      tasksMap[selectedStudent.studentId] ?? getInitialTasks(selectedStudent)
-    );
-  }, [serverTasks, selectedStudent, tasksMap]);
-
-  const saveTasks = (next: ActionPlanTask[]) => {
-    if (!selectedStudent) return;
-    setTasksMap((prev) => ({ ...prev, [selectedStudent.studentId]: next }));
-    try {
-      localStorage.setItem(
-        `aurora_advising_actionplan_${selectedStudent.studentId}`,
-        JSON.stringify(next),
-      );
-    } catch {
-      // ignore
-    }
-  };
-
-  const handleToggleTask = (taskId: string) => {
-    const task = actionTasks.find((t) => t.id === taskId);
-    const nextCompleted = task ? !task.completed : true;
-
-    const next = actionTasks.map((t) =>
-      t.id === taskId ? { ...t, completed: nextCompleted } : t,
-    );
-    saveTasks(next);
-
-    if (activeSessionId) {
-      toggleTaskMutation.mutate({
-        taskId,
-        payload: { completed: nextCompleted },
+          notes:
+            newAppointmentNotes.trim() ||
+            "Giảng viên mời sinh viên trao đổi kết quả học tập.",
+        },
       });
+      setNewAppointmentNotes("");
+      toast.success(
+        `Đã xếp lịch hẹn tiếp sinh viên ${selectedStudent.studentName}!`,
+      );
+    } catch (err) {
+      toast.error(
+        extractErrorMessage(err, "Không thể tạo phiếu hẹn. Vui lòng thử lại."),
+      );
+    }
+  };
+
+  // 3. Action Plan Tasks from Backend
+  const actionTasks: ActionPlanTask[] = useMemo(() => {
+    if (!activeSessionId || !serverTasks) return [];
+    return serverTasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      description: t.description || undefined,
+      deadline: t.deadline,
+      priority: t.priority,
+      completed: t.completed,
+    }));
+  }, [activeSessionId, serverTasks]);
+
+  const handleToggleTask = async (taskId: string) => {
+    if (!activeSessionId) return;
+    const task = actionTasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    try {
+      await toggleTaskMutation.mutateAsync({
+        sessionId: activeSessionId,
+        taskId,
+        payload: { completed: !task.completed },
+      });
+    } catch (err) {
+      toast.error(
+        extractErrorMessage(err, "Không thể cập nhật trạng thái nhiệm vụ."),
+      );
     }
   };
 
@@ -786,68 +584,44 @@ export const LecturerInterventionsPage = () => {
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTaskTitle.trim() || !selectedStudent) return;
-
-    const newTask: ActionPlanTask = {
-      id: `task-${Date.now()}`,
-      advisorId: `course-${selectedStudent.courseCode}`,
-      title: newTaskTitle.trim(),
-      description: "Nhiệm vụ cải thiện điểm số do giảng viên trực tiếp giao.",
-      deadline: newTaskDeadline,
-      priority: newTaskPriority,
-      completed: false,
-    };
-
-    saveTasks([newTask, ...actionTasks]);
     const addedTitle = newTaskTitle.trim();
-    setNewTaskTitle("");
+    if (!addedTitle || !selectedStudent) return;
 
-    // Call Backend
     try {
-      let targetSessionId = activeSessionId;
-      if (!targetSessionId) {
-        const created = await createOrGetSessionMutation.mutateAsync({
-          student_id: selectedStudent.studentId,
-          course_code: selectedStudent.courseCode,
-          topic: `Cố vấn học vụ môn ${selectedStudent.courseCode}`,
-          risk_level: selectedStudent.riskLevel,
-          lecturer_id: lecturerId,
-        });
-        targetSessionId = created.id;
-      }
-      if (targetSessionId) {
-        await createTaskMutation.mutateAsync({
+      const targetSessionId = await ensureSessionId(selectedStudent);
+      await createTaskMutation.mutateAsync({
+        sessionId: targetSessionId,
+        payload: {
           title: addedTitle,
           description: "Nhiệm vụ cải thiện điểm số do giảng viên trực tiếp giao.",
-          deadline: newTaskDeadline,
+          deadline: newTaskDeadline.trim() || "Cuối kỳ",
           priority: newTaskPriority,
-        });
-      }
-    } catch {
-      // Fallback
+        },
+      });
+      setNewTaskTitle("");
+      toast.success(
+        `Đã giao nhiệm vụ cải thiện cho sinh viên ${selectedStudent.studentName}!`,
+      );
+    } catch (err) {
+      toast.error(
+        extractErrorMessage(err, "Không thể giao nhiệm vụ. Vui lòng thử lại."),
+      );
     }
-
-    toast.success(
-      `Đã giao nhiệm vụ cải thiện cho sinh viên ${selectedStudent.studentName}!`,
-    );
   };
 
   // Filtered Students in Left Column
   const filteredStudents = useMemo(() => {
     return students.filter((s) => {
-      // Class filter
       if (selectedClassId !== "ALL" && s.classId !== selectedClassId) {
         return false;
       }
-      // Risk / Booking filter
       if (filterRisk === "CRITICAL" && s.riskLevel !== "CRITICAL") return false;
       if (filterRisk === "WARNING" && s.riskLevel !== "WARNING") return false;
-      if (filterRisk === "BOOKING") {
-        const bookingsKey = `aurora_advising_bookings_${s.studentId}`;
-        const hasBooking = localStorage.getItem(bookingsKey);
-        if (!hasBooking && s.riskLevel !== "CRITICAL") return false;
+      if (filterRisk === "SESSIONS") {
+        if (!sessionMapByStudentCourse.has(`${s.studentId}::${s.courseCode}`)) {
+          return false;
+        }
       }
-      // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchName = s.studentName.toLowerCase().includes(q);
@@ -857,7 +631,13 @@ export const LecturerInterventionsPage = () => {
       }
       return true;
     });
-  }, [students, selectedClassId, filterRisk, searchQuery]);
+  }, [
+    students,
+    selectedClassId,
+    filterRisk,
+    searchQuery,
+    sessionMapByStudentCourse,
+  ]);
 
   // Metric counts
   const criticalCount = useMemo(
@@ -867,6 +647,13 @@ export const LecturerInterventionsPage = () => {
   const warningCount = useMemo(
     () => students.filter((s) => s.riskLevel === "WARNING").length,
     [students],
+  );
+  const activeSessionsCount = useMemo(
+    () =>
+      students.filter((s) =>
+        sessionMapByStudentCourse.has(`${s.studentId}::${s.courseCode}`),
+      ).length,
+    [students, sessionMapByStudentCourse],
   );
 
   const handleSendEmail = (
@@ -878,7 +665,7 @@ export const LecturerInterventionsPage = () => {
       `[${courseCode}] Thư mời Cố vấn & Trao đổi Học vụ`,
     );
     const body = encodeURIComponent(
-      `Chào em ${studentName},\n\nThầy gửi thông báo này liên quan đến kết quả học tập và bài thi giữa kỳ môn ${courseCode}. Em vui lòng sắp xếp thời gian đến phòng làm việc của Thầy vào giờ tiếp sinh viên (Office Hours) hoặc đăng ký lịch hẹn trên hệ thống để trao đổi phương án ôn tập cuối kỳ nhé.\n\nTrân trọng,\n${lecturerName}`,
+      `Chào em ${studentName},\n\nThầy/Cô gửi thông báo này liên quan đến kết quả học tập môn ${courseCode}. Em vui lòng sắp xếp thời gian trao đổi trong giờ tiếp sinh viên (Office Hours) hoặc đăng ký lịch hẹn trên hệ thống nhé.\n\nTrân trọng,\n${lecturerName}`,
     );
     window.open(`mailto:${email}?subject=${subject}&body=${body}`, "_self");
   };
@@ -888,6 +675,15 @@ export const LecturerInterventionsPage = () => {
     actionTasks.length > 0
       ? Math.round((completedTaskCount / actionTasks.length) * 100)
       : 0;
+
+  const showAiFallbackBanner =
+    !isLoadingClasses &&
+    !isLoadingPredictions &&
+    classIds.length > 0 &&
+    !hasAnyAiPrediction;
+
+  const isBusySending =
+    createOrGetSessionMutation.isPending || sendMessageMutation.isPending;
 
   return (
     <div className="space-y-6 pb-12">
@@ -907,8 +703,8 @@ export const LecturerInterventionsPage = () => {
             Trung tâm Cố vấn & Can thiệp Sinh viên
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Kênh tương tác hai chiều với sinh viên: gửi tin nhắn dặn dò cá nhân,
-            phê duyệt lịch hẹn tiếp sinh viên và theo dõi nhiệm vụ cải thiện.
+            Kênh tương tác hai chiều với sinh viên theo phân loại rủi ro AI:
+            gửi tin nhắn cá nhân, duyệt lịch hẹn và giao nhiệm vụ cải thiện.
           </p>
         </div>
 
@@ -917,7 +713,7 @@ export const LecturerInterventionsPage = () => {
             variant="outline"
             size="sm"
             onClick={() => {
-              refetchClasses();
+              void refetchClasses();
               toast.info("Đã làm mới dữ liệu lớp học & sinh viên.");
             }}
             className="cursor-pointer gap-1.5 border-slate-200 bg-white text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50"
@@ -925,22 +721,38 @@ export const LecturerInterventionsPage = () => {
             <RefreshCw className="h-3.5 w-3.5 text-slate-500" />
             <span>Làm mới dữ liệu</span>
           </Button>
-          <Button
-            size="sm"
-            onClick={() => {
-              handleSendMessage(
-                `[THÔNG BÁO CHUNG] Thầy đã cập nhật slide ôn tập chương 4 và bộ câu hỏi mẫu trên LMS. Các em nhớ tải về làm trước tuần thi cuối kỳ nhé!`,
-              );
-            }}
-            className="cursor-pointer gap-1.5 rounded-lg bg-blue-600 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700"
-          >
-            <Send className="h-3.5 w-3.5" />
-            <span>Gửi lời dặn chung</span>
-          </Button>
+          {selectedStudent && (
+            <Button
+              size="sm"
+              disabled={isBusySending}
+              onClick={() => {
+                void handleSendMessage(
+                  `[THÔNG BÁO MÔN ${selectedStudent.courseCode}] Thầy/Cô đã cập nhật tài liệu ôn tập mới trên LMS. Em nhớ xem lại và chủ động đặt lịch tư vấn nếu cần hỗ trợ thêm nhé!`,
+                );
+              }}
+              className="cursor-pointer gap-1.5 rounded-lg bg-blue-600 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700"
+            >
+              <Send className="h-3.5 w-3.5" />
+              <span>Nhắc ôn tập nhanh</span>
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* 2. Top Summary KPI Cards (Theme tối bg-slate-900) */}
+      {/* AI Service Offline Banner */}
+      {showAiFallbackBanner && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <p>
+            Dịch vụ dự báo AI tạm thời chưa phản hồi — danh sách rủi ro đang tạm
+            hiển thị theo quy tắc điểm giữa kỳ &amp; học lại. Mọi chức năng
+            nhắn tin, lịch hẹn và giao nhiệm vụ vẫn đồng bộ trực tiếp với máy
+            chủ.
+          </p>
+        </div>
+      )}
+
+      {/* 2. Top Summary KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Card 1: Total Students Monitored */}
         <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-md">
@@ -981,12 +793,18 @@ export const LecturerInterventionsPage = () => {
                 Cần Can thiệp Khẩn cấp
               </p>
               <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-3xl font-extrabold tracking-tight text-rose-400">
-                  {criticalCount}
-                </span>
-                <Badge className="bg-rose-950/80 text-rose-300 ring-1 ring-rose-500/40 border-0 text-xs font-bold">
-                  Điểm GK &lt; 4.0 / Học lại
-                </Badge>
+                {isLoadingEnrollments || isLoadingPredictions ? (
+                  <Skeleton className="h-9 w-20 bg-slate-800" />
+                ) : (
+                  <>
+                    <span className="text-3xl font-extrabold tracking-tight text-rose-400">
+                      {criticalCount}
+                    </span>
+                    <Badge className="bg-rose-950/80 text-rose-300 ring-1 ring-rose-500/40 border-0 text-xs font-bold">
+                      {hasAnyAiPrediction ? "AI High Risk" : "GK < 4.0 / Học lại"}
+                    </Badge>
+                  </>
+                )}
               </div>
             </div>
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-950/50 text-rose-400 ring-1 ring-rose-500/30">
@@ -994,24 +812,24 @@ export const LecturerInterventionsPage = () => {
             </div>
           </div>
           <p className="mt-3 text-xs text-slate-400">
-            Có {warningCount} sinh viên khác đang ở mức điểm cần chú ý
+            Có {warningCount} sinh viên khác ở mức Cần chú ý (Medium)
           </p>
         </div>
 
-        {/* Card 3: Office Hours Appointments */}
+        {/* Card 3: Active Advising Sessions */}
         <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-md">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">
-                Phiếu Hẹn Tiếp Sinh Viên
+                Phiên Cố vấn Đang Mở
               </p>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="text-3xl font-extrabold tracking-tight text-emerald-400">
-                  {appointments.length}
+                  {serverSessions?.length ?? 0}
                 </span>
                 <Badge className="bg-emerald-950/80 text-emerald-300 ring-1 ring-emerald-500/40 border-0 text-xs font-bold">
                   {appointments.filter((a) => a.status === "PENDING").length}{" "}
-                  Chờ duyệt
+                  Hẹn chờ duyệt
                 </Badge>
               </div>
             </div>
@@ -1020,7 +838,7 @@ export const LecturerInterventionsPage = () => {
             </div>
           </div>
           <p className="mt-3 text-xs text-slate-400">
-            Giờ tiếp sinh viên tại P.503 Nhà H6 hoặc qua Google Meet
+            Đồng bộ trực tiếp với Cổng Sinh viên theo thời gian thực
           </p>
         </div>
       </div>
@@ -1106,16 +924,16 @@ export const LecturerInterventionsPage = () => {
 
                 <button
                   type="button"
-                  onClick={() => setFilterRisk("BOOKING")}
+                  onClick={() => setFilterRisk("SESSIONS")}
                   className={cn(
                     "rounded-md py-1 font-semibold transition-all cursor-pointer flex items-center justify-center gap-1",
-                    filterRisk === "BOOKING"
+                    filterRisk === "SESSIONS"
                       ? "bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs"
                       : "text-slate-600 hover:text-emerald-700",
                   )}
                 >
-                  <span>📅 Lịch hẹn</span>
-                  <span className="font-bold">({appointments.length})</span>
+                  <span>💬 Đang cố vấn</span>
+                  <span className="font-bold">({activeSessionsCount})</span>
                 </button>
 
                 <button
@@ -1135,7 +953,13 @@ export const LecturerInterventionsPage = () => {
             </CardHeader>
 
             <CardContent className="p-2 divide-y divide-slate-100 max-h-155 overflow-y-auto">
-              {filteredStudents.length === 0 ? (
+              {isLoadingClasses || isLoadingEnrollments ? (
+                <div className="space-y-2 p-2">
+                  {[1, 2, 3, 4].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                  ))}
+                </div>
+              ) : filteredStudents.length === 0 ? (
                 <div className="py-8 text-center text-xs text-slate-500">
                   <Users className="mx-auto h-8 w-8 text-slate-300" />
                   <p className="mt-2 font-semibold text-slate-700">
@@ -1147,13 +971,18 @@ export const LecturerInterventionsPage = () => {
                 </div>
               ) : (
                 filteredStudents.map((student) => {
-                  const isSelected = student.studentId === selectedStudentId;
+                  const isSelected =
+                    selectedStudent?.studentId === student.studentId &&
+                    selectedStudent?.courseCode === student.courseCode;
+                  const studentSession = sessionMapByStudentCourse.get(
+                    `${student.studentId}::${student.courseCode}`,
+                  );
 
                   return (
                     <button
                       key={`${student.classId}-${student.studentId}`}
                       type="button"
-                      onClick={() => handleSelectStudent(student.studentId)}
+                      onClick={() => handleSelectStudent(student)}
                       className={cn(
                         "w-full text-left p-3 rounded-xl transition-all cursor-pointer flex flex-col gap-1.5",
                         isSelected
@@ -1187,22 +1016,27 @@ export const LecturerInterventionsPage = () => {
                           </div>
                         </div>
 
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "shrink-0 px-1.5 py-0 text-[10px] font-semibold",
-                            student.riskLevel === "CRITICAL" &&
-                              "border-rose-300 bg-rose-50 text-rose-700",
-                            student.riskLevel === "WARNING" &&
-                              "border-amber-300 bg-amber-50 text-amber-700",
-                            student.riskLevel === "SAFE" &&
-                              "border-emerald-300 bg-emerald-50 text-emerald-700",
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "px-1.5 py-0 text-[10px] font-semibold",
+                              student.riskLevel === "CRITICAL" &&
+                                "border-rose-300 bg-rose-50 text-rose-700",
+                              student.riskLevel === "WARNING" &&
+                                "border-amber-300 bg-amber-50 text-amber-700",
+                              student.riskLevel === "SAFE" &&
+                                "border-emerald-300 bg-emerald-50 text-emerald-700",
+                            )}
+                          >
+                            {Math.round(student.failProbability * 100)}% rớt
+                          </Badge>
+                          {studentSession && studentSession.unread_count > 0 && (
+                            <Badge className="bg-blue-600 text-[9px] text-white px-1.5 py-0">
+                              {studentSession.unread_count} tin mới
+                            </Badge>
                           )}
-                        >
-                          {student.riskLevel === "CRITICAL" && "Nguy cơ cao"}
-                          {student.riskLevel === "WARNING" && "Cần chú ý"}
-                          {student.riskLevel === "SAFE" && "An toàn"}
-                        </Badge>
+                        </div>
                       </div>
 
                       <div className="flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-100/80 pt-1.5 mt-0.5">
@@ -1313,43 +1147,57 @@ export const LecturerInterventionsPage = () => {
                 </div>
 
                 {/* Score Pills & Risk Alert Banner */}
-                <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
-                  <div className="flex items-center gap-4 text-xs">
-                    <div>
-                      <span className="text-[10px] text-slate-400 uppercase font-semibold">
-                        Điểm Giữa kỳ
-                      </span>
-                      <p className="font-bold text-slate-900">
-                        {selectedStudent.giuaKy !== null
-                          ? `${selectedStudent.giuaKy.toFixed(1)}/10`
-                          : "Chưa có"}
-                      </p>
+                <div className="mt-3.5 space-y-2 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-4 text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                          Điểm Giữa kỳ
+                        </span>
+                        <p className="font-bold text-slate-900">
+                          {selectedStudent.giuaKy !== null
+                            ? `${selectedStudent.giuaKy.toFixed(1)}/10`
+                            : "Chưa có"}
+                        </p>
+                      </div>
+                      <div className="h-6 w-px bg-slate-200" />
+                      <div>
+                        <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                          Thực hành Lab
+                        </span>
+                        <p className="font-bold text-slate-900">
+                          {selectedStudent.lab !== null
+                            ? `${selectedStudent.lab.toFixed(1)}/10`
+                            : "Chưa có"}
+                        </p>
+                      </div>
+                      <div className="h-6 w-px bg-slate-200" />
+                      <div>
+                        <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                          Bài tập lớn
+                        </span>
+                        <p className="font-bold text-slate-900">
+                          {selectedStudent.btl !== null
+                            ? `${selectedStudent.btl.toFixed(1)}/10`
+                            : "Chưa có"}
+                        </p>
+                      </div>
+                      {selectedStudent.predictedScore10 !== null && (
+                        <>
+                          <div className="h-6 w-px bg-slate-200" />
+                          <div>
+                            <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                              Dự báo AI
+                            </span>
+                            <p className="font-bold text-blue-700">
+                              {selectedStudent.predictedScore10.toFixed(1)}/10 (
+                              {selectedStudent.predictedLetterGrade ?? "—"})
+                            </p>
+                          </div>
+                        </>
+                      )}
                     </div>
-                    <div className="h-6 w-px bg-slate-200" />
-                    <div>
-                      <span className="text-[10px] text-slate-400 uppercase font-semibold">
-                        Thực hành Lab
-                      </span>
-                      <p className="font-bold text-slate-900">
-                        {selectedStudent.lab !== null
-                          ? `${selectedStudent.lab.toFixed(1)}/10`
-                          : "Chưa có"}
-                      </p>
-                    </div>
-                    <div className="h-6 w-px bg-slate-200" />
-                    <div>
-                      <span className="text-[10px] text-slate-400 uppercase font-semibold">
-                        Bài tập lớn (BTL)
-                      </span>
-                      <p className="font-bold text-slate-900">
-                        {selectedStudent.btl !== null
-                          ? `${selectedStudent.btl.toFixed(1)}/10`
-                          : "Chưa có"}
-                      </p>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-2">
                     <Badge
                       className={cn(
                         "text-xs font-bold px-2 py-0.5",
@@ -1360,37 +1208,43 @@ export const LecturerInterventionsPage = () => {
                             : "bg-emerald-100 text-emerald-800 border-emerald-200",
                       )}
                     >
-                      {selectedStudent.riskLevel === "CRITICAL" &&
-                        "Rủi ro rớt môn cao (≥ 65%)"}
-                      {selectedStudent.riskLevel === "WARNING" &&
-                        "Cần chú ý củng cố điểm"}
-                      {selectedStudent.riskLevel === "SAFE" &&
-                        "Học lực ổn định"}
+                      {selectedStudent.isAiPrediction ? "AI: " : ""}
+                      Xác suất rớt{" "}
+                      {(selectedStudent.failProbability * 100).toFixed(0)}%
                     </Badge>
                   </div>
+
+                  <p className="text-[11px] text-slate-600 border-t border-slate-200/70 pt-2">
+                    <span className="font-semibold text-slate-800">
+                      {selectedStudent.isAiPrediction
+                        ? "Yếu tố SHAP nổi bật: "
+                        : "Nhận định: "}
+                    </span>
+                    {selectedStudent.riskReason}
+                  </p>
                 </div>
 
                 {/* 3 Tab Navigation Header */}
-                <div className="mt-4 flex border-b border-slate-200 gap-6">
+                <div className="mt-4 flex border-b border-slate-200 gap-6 overflow-x-auto">
                   <button
                     type="button"
                     onClick={() => handleTabChange("messages")}
                     className={cn(
-                      "pb-2.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border-b-2",
+                      "pb-2.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border-b-2 shrink-0",
                       activeTab === "messages"
                         ? "border-blue-600 text-blue-600"
                         : "border-transparent text-slate-500 hover:text-slate-800",
                     )}
                   >
                     <MessageSquare className="h-3.5 w-3.5" />
-                    <span>Lời dặn & Trao đổi ({messages.length})</span>
+                    <span>Lời dặn &amp; Trao đổi ({messages.length})</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => handleTabChange("bookings")}
                     className={cn(
-                      "pb-2.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border-b-2",
+                      "pb-2.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border-b-2 shrink-0",
                       activeTab === "bookings"
                         ? "border-blue-600 text-blue-600"
                         : "border-transparent text-slate-500 hover:text-slate-800",
@@ -1404,7 +1258,7 @@ export const LecturerInterventionsPage = () => {
                     type="button"
                     onClick={() => handleTabChange("action-plan")}
                     className={cn(
-                      "pb-2.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border-b-2",
+                      "pb-2.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border-b-2 shrink-0",
                       activeTab === "action-plan"
                         ? "border-blue-600 text-blue-600"
                         : "border-transparent text-slate-500 hover:text-slate-800",
@@ -1420,17 +1274,42 @@ export const LecturerInterventionsPage = () => {
               </CardHeader>
 
               <CardContent className="pt-4">
-                {/* ============================================================== */}
-                {/* TAB 1: LỜI DẶN DÒ & TRAO ĐỔI HAI CHIỀU                        */}
-                {/* ============================================================== */}
+                {/* TAB 1: LỜI DẶN DÒ & TRAO ĐỔI HAI CHIỀU */}
                 {activeTab === "messages" && (
                   <div className="space-y-4">
-                    {/* Chat Bubble History */}
+                    {activeSessionId && (activeSession?.unread_count ?? 0) > 0 && (
+                      <div className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50/70 px-3 py-2 text-xs">
+                        <span className="font-semibold text-blue-900">
+                          Có {activeSession?.unread_count} tin nhắn mới chưa đọc
+                          từ {selectedStudent.studentName}.
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={markSessionReadMutation.isPending}
+                          onClick={() =>
+                            markSessionReadMutation.mutate(activeSessionId)
+                          }
+                          className="h-7 border-blue-300 bg-white text-[11px] font-semibold text-blue-700 hover:bg-blue-50 cursor-pointer gap-1"
+                        >
+                          <CheckCheck className="h-3.5 w-3.5" />
+                          <span>Đánh dấu đã đọc</span>
+                        </Button>
+                      </div>
+                    )}
+
                     <div className="space-y-3 min-h-55 max-h-85 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/50 p-4">
-                      {messages.length === 0 ? (
+                      {isLoadingMessages ? (
+                        <div className="space-y-2">
+                          <Skeleton className="h-12 w-3/4 rounded-xl" />
+                          <Skeleton className="ml-auto h-12 w-2/3 rounded-xl" />
+                        </div>
+                      ) : messages.length === 0 ? (
                         <div className="py-8 text-center text-xs text-slate-400">
-                          Chưa có tin nhắn trao đổi nào với sinh viên này. Hãy
-                          gửi lời dặn dò đầu tiên!
+                          Chưa có tin nhắn trao đổi nào với sinh viên này cho
+                          môn {selectedStudent.courseCode}. Hãy gửi lời dặn dò
+                          đầu tiên!
                         </div>
                       ) : (
                         messages.map((msg) => {
@@ -1452,13 +1331,17 @@ export const LecturerInterventionsPage = () => {
                                 </span>
                                 <span>•</span>
                                 <span>{msg.timestamp}</span>
-                                {msg.isQuickRequest && (
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[9px] px-1 py-0 border-blue-200 bg-blue-50 text-blue-700"
+                                {isLecturer && (
+                                  <span
+                                    className={cn(
+                                      "font-medium",
+                                      msg.isRead
+                                        ? "text-emerald-600"
+                                        : "text-slate-400",
+                                    )}
                                   >
-                                    Yêu cầu nhanh
-                                  </Badge>
+                                    • {msg.isRead ? "SV đã xem" : "Đã gửi"}
+                                  </span>
                                 )}
                               </div>
                               <div
@@ -1485,9 +1368,10 @@ export const LecturerInterventionsPage = () => {
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
+                          disabled={isBusySending}
                           onClick={() =>
-                            handleSendMessage(
-                              `Chào em, điểm giữa kỳ môn ${selectedStudent.courseCode} của em đang dưới 4.0. Em cần chú ý hoàn thành tốt BTL và đăng ký gặp Thầy trong giờ tiếp sinh viên để hướng dẫn phương án ôn tập cuối kỳ nhé.`,
+                            void handleSendMessage(
+                              `Chào em ${selectedStudent.studentName}, kết quả hiện tại môn ${selectedStudent.courseCode} của em đang có nguy cơ rủi ro. Em chú ý hoàn thành tốt BTL và đăng ký gặp Thầy/Cô trong giờ tiếp sinh viên để xây dựng kế hoạch ôn tập cuối kỳ nhé.`,
                             )
                           }
                           className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-700 transition-all cursor-pointer text-left"
@@ -1496,9 +1380,10 @@ export const LecturerInterventionsPage = () => {
                         </button>
                         <button
                           type="button"
+                          disabled={isBusySending}
                           onClick={() =>
-                            handleSendMessage(
-                              `Chào em, Thầy đã gửi tài liệu tóm tắt lý thuyết và các dạng bài tập mẫu ôn thi môn ${selectedStudent.courseCode} lên LMS. Em nhớ tải về tự luyện tập trước tuần 12 nhé.`,
+                            void handleSendMessage(
+                              `Chào em, Thầy/Cô đã gửi tài liệu tóm tắt lý thuyết và các dạng bài tập mẫu ôn thi môn ${selectedStudent.courseCode} lên LMS. Em nhớ tải về tự luyện tập nhé.`,
                             )
                           }
                           className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-700 transition-all cursor-pointer text-left"
@@ -1507,14 +1392,15 @@ export const LecturerInterventionsPage = () => {
                         </button>
                         <button
                           type="button"
+                          disabled={isBusySending}
                           onClick={() =>
-                            handleSendMessage(
-                              `Chào em, Thầy có lịch tiếp sinh viên tại P.503 Nhà H6 vào chiều Thứ Ba. Em có thể đến trực tiếp hoặc đặt lịch hẹn trên hệ thống để trao đổi bài thi nhé.`,
+                            void handleSendMessage(
+                              `Chào em, Thầy/Cô có lịch tiếp sinh viên tại P.503 Nhà H6 vào chiều Thứ Ba. Em có thể đến trực tiếp hoặc đặt lịch hẹn trên hệ thống để trao đổi bài thi nhé.`,
                             )
                           }
                           className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-700 transition-all cursor-pointer text-left"
                         >
-                          ⏰ Mời đến văn phòng bộ môn gặp Thầy
+                          ⏰ Mời đến văn phòng bộ môn gặp Thầy/Cô
                         </button>
                       </div>
                     </div>
@@ -1523,7 +1409,7 @@ export const LecturerInterventionsPage = () => {
                     <form
                       onSubmit={(e) => {
                         e.preventDefault();
-                        handleSendMessage();
+                        void handleSendMessage();
                       }}
                       className="flex gap-2 pt-1"
                     >
@@ -1532,27 +1418,27 @@ export const LecturerInterventionsPage = () => {
                         placeholder={`Soạn lời dặn dò gửi cho ${selectedStudent.studentName}...`}
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
+                        disabled={isBusySending}
                         className="text-xs bg-slate-50 border-slate-200 focus-visible:ring-1 focus-visible:ring-blue-500"
                       />
                       <Button
                         type="submit"
                         size="sm"
-                        disabled={!chatInput.trim()}
+                        disabled={!chatInput.trim() || isBusySending}
                         className="bg-blue-600 hover:bg-blue-700 text-white text-xs cursor-pointer gap-1.5 shrink-0"
                       >
                         <Send className="h-3.5 w-3.5" />
-                        <span>Gửi lời dặn</span>
+                        <span>
+                          {isBusySending ? "Đang gửi..." : "Gửi lời dặn"}
+                        </span>
                       </Button>
                     </form>
                   </div>
                 )}
 
-                {/* ============================================================== */}
-                {/* TAB 2: QUẢN LÝ LỊCH HẸN TIẾP SINH VIÊN (OFFICE HOURS)         */}
-                {/* ============================================================== */}
+                {/* TAB 2: QUẢN LÝ LỊCH HẸN TIẾP SINH VIÊN */}
                 {activeTab === "bookings" && (
                   <div className="space-y-5">
-                    {/* Danh sách các phiếu hẹn của sinh viên này */}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-700 uppercase">
@@ -1563,14 +1449,17 @@ export const LecturerInterventionsPage = () => {
                         </span>
                       </div>
 
-                      {appointments.length === 0 ? (
+                      {isLoadingAppointments ? (
+                        <Skeleton className="h-20 w-full rounded-xl" />
+                      ) : appointments.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-xs text-slate-500">
                           <Calendar className="mx-auto h-8 w-8 text-slate-300" />
                           <p className="mt-2 font-semibold text-slate-700">
                             Chưa có lịch hẹn nào
                           </p>
                           <p className="text-slate-400 mt-0.5">
-                            Sinh viên chưa gửi phiếu hẹn tiếp sinh viên.
+                            Sinh viên chưa gửi phiếu hẹn cho môn{" "}
+                            {selectedStudent.courseCode}.
                           </p>
                         </div>
                       ) : (
@@ -1586,26 +1475,35 @@ export const LecturerInterventionsPage = () => {
                               )}
                             >
                               <div className="space-y-1">
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                   <Badge
                                     variant="outline"
                                     className={cn(
                                       "text-[10px] font-bold px-1.5 py-0",
-                                      book.status === "CONFIRMED"
-                                        ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                                        : "border-amber-300 bg-amber-50 text-amber-700",
+                                      book.status === "CONFIRMED" &&
+                                        "border-emerald-300 bg-emerald-50 text-emerald-700",
+                                      book.status === "PENDING" &&
+                                        "border-amber-300 bg-amber-50 text-amber-700",
+                                      book.status === "COMPLETED" &&
+                                        "border-blue-300 bg-blue-50 text-blue-700",
+                                      book.status === "CANCELLED" &&
+                                        "border-slate-300 bg-slate-100 text-slate-600",
                                     )}
                                   >
-                                    {book.status === "CONFIRMED"
-                                      ? "✅ Đã xác nhận"
-                                      : "⏳ Chờ Thầy duyệt"}
+                                    {book.status === "CONFIRMED" &&
+                                      "✅ Đã xác nhận"}
+                                    {book.status === "PENDING" &&
+                                      "⏳ Chờ Thầy/Cô duyệt"}
+                                    {book.status === "COMPLETED" &&
+                                      "✔ Đã hoàn thành"}
+                                    {book.status === "CANCELLED" && "✕ Đã hủy"}
                                   </Badge>
                                   <span className="text-xs font-bold text-slate-900">
                                     {book.subject}
                                   </span>
                                 </div>
 
-                                <div className="flex items-center gap-3 text-xs text-slate-600">
+                                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
                                   <span className="flex items-center gap-1 text-slate-700 font-medium">
                                     <Clock className="h-3.5 w-3.5 text-blue-600" />
                                     {book.timeSlot}
@@ -1628,37 +1526,69 @@ export const LecturerInterventionsPage = () => {
 
                                 {book.notes && (
                                   <p className="text-xs text-slate-500 italic">
-                                    Ghi chú sinh viên: &ldquo;{book.notes}
-                                    &rdquo;
+                                    Ghi chú: &ldquo;{book.notes}&rdquo;
                                   </p>
                                 )}
                               </div>
 
-                              <div className="flex items-center gap-2 shrink-0">
+                              <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                                 {book.status === "PENDING" && (
                                   <Button
                                     size="sm"
+                                    disabled={
+                                      updateAppointmentStatusMutation.isPending
+                                    }
                                     onClick={() =>
-                                      handleConfirmBooking(book.id)
+                                      void handleUpdateBookingStatus(
+                                        book.id,
+                                        "CONFIRMED",
+                                      )
                                     }
                                     className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs cursor-pointer gap-1"
                                   >
                                     <CheckCircle2 className="h-3.5 w-3.5" />
-                                    <span>Chấp nhận hẹn</span>
+                                    <span>Chấp nhận</span>
                                   </Button>
                                 )}
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    handleSendMessage(
-                                      `Thầy đã nhận được yêu cầu hẹn của em. Thầy hẹn gặp em vào ${book.timeSlot} tại ${book.location}. Em nhớ chuẩn bị sẵn bài vở nhé.`,
-                                    );
-                                  }}
-                                  className="text-xs text-slate-700 hover:bg-slate-50 cursor-pointer"
-                                >
-                                  Gửi tin nhắn xác nhận
-                                </Button>
+                                {book.status === "CONFIRMED" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={
+                                      updateAppointmentStatusMutation.isPending
+                                    }
+                                    onClick={() =>
+                                      void handleUpdateBookingStatus(
+                                        book.id,
+                                        "COMPLETED",
+                                      )
+                                    }
+                                    className="border-blue-200 text-blue-700 hover:bg-blue-50 text-xs cursor-pointer gap-1"
+                                  >
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    <span>Hoàn thành</span>
+                                  </Button>
+                                )}
+                                {(book.status === "PENDING" ||
+                                  book.status === "CONFIRMED") && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={
+                                      updateAppointmentStatusMutation.isPending
+                                    }
+                                    onClick={() =>
+                                      void handleUpdateBookingStatus(
+                                        book.id,
+                                        "CANCELLED",
+                                      )
+                                    }
+                                    className="text-xs text-slate-500 hover:text-rose-600 cursor-pointer gap-1"
+                                  >
+                                    <XCircle className="h-3.5 w-3.5" />
+                                    <span>Hủy</span>
+                                  </Button>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -1736,6 +1666,10 @@ export const LecturerInterventionsPage = () => {
                         <Button
                           type="submit"
                           size="sm"
+                          disabled={
+                            createAppointmentMutation.isPending ||
+                            createOrGetSessionMutation.isPending
+                          }
                           className="bg-blue-600 hover:bg-blue-700 text-white text-xs cursor-pointer gap-1.5"
                         >
                           <CalendarCheck className="h-3.5 w-3.5" />
@@ -1746,12 +1680,9 @@ export const LecturerInterventionsPage = () => {
                   </div>
                 )}
 
-                {/* ============================================================== */}
-                {/* TAB 3: GIAO NHIỆM VỤ CẢI THIỆN (ACTION PLAN CHECKLIST)         */}
-                {/* ============================================================== */}
+                {/* TAB 3: GIAO NHIỆM VỤ CẢI THIỆN */}
                 {activeTab === "action-plan" && (
                   <div className="space-y-5">
-                    {/* Header Tiến độ hoàn thành */}
                     <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 space-y-2">
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-bold text-slate-800">
@@ -1772,13 +1703,14 @@ export const LecturerInterventionsPage = () => {
                       </p>
                     </div>
 
-                    {/* Danh sách nhiệm vụ checklist */}
                     <div className="space-y-2">
                       <span className="text-xs font-bold text-slate-700 uppercase">
                         Các đầu việc đã giao cho sinh viên này:
                       </span>
 
-                      {actionTasks.length === 0 ? (
+                      {isLoadingTasks ? (
+                        <Skeleton className="h-16 w-full rounded-xl" />
+                      ) : actionTasks.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-xs text-slate-500">
                           <ListTodo className="mx-auto h-8 w-8 text-slate-300" />
                           <p className="mt-2 font-semibold text-slate-700">
@@ -1801,7 +1733,7 @@ export const LecturerInterventionsPage = () => {
                           >
                             <button
                               type="button"
-                              onClick={() => handleToggleTask(task.id)}
+                              onClick={() => void handleToggleTask(task.id)}
                               className="mt-0.5 text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
                             >
                               {task.completed ? (
@@ -1874,7 +1806,7 @@ export const LecturerInterventionsPage = () => {
                             type="text"
                             value={newTaskTitle}
                             onChange={(e) => setNewTaskTitle(e.target.value)}
-                            placeholder="Ví dụ: Nộp bài dự thảo Báo cáo BTL tuần 11, Làm lại bài tập Pipeline..."
+                            placeholder="Ví dụ: Nộp dự thảo Báo cáo BTL tuần 11, Làm lại bài tập Pipeline..."
                             className="h-8 text-xs bg-white mt-1"
                           />
                         </div>
@@ -1925,7 +1857,11 @@ export const LecturerInterventionsPage = () => {
                         <Button
                           type="submit"
                           size="sm"
-                          disabled={!newTaskTitle.trim()}
+                          disabled={
+                            !newTaskTitle.trim() ||
+                            createTaskMutation.isPending ||
+                            createOrGetSessionMutation.isPending
+                          }
                           className="bg-blue-600 hover:bg-blue-700 text-white text-xs cursor-pointer gap-1.5"
                         >
                           <Plus className="h-3.5 w-3.5" />
