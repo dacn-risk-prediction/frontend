@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   GraduationCap,
   Award,
@@ -9,6 +10,7 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
+  Layers,
 } from "lucide-react";
 import {
   Card,
@@ -31,6 +33,7 @@ import {
   useStudentCurrentCourses,
   useAllCourses,
 } from "../api/student-api";
+import { CurriculumProgressTab } from "./CurriculumProgressTab";
 
 // Standard Bachelor Degree Requirement (HCMUT)
 const DEGREE_TOTAL_CREDITS = 128;
@@ -100,6 +103,19 @@ interface SemesterGroup {
 }
 
 export const StudentAcademicRecordPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeViewTab: "transcript" | "curriculum" =
+    searchParams.get("tab") === "curriculum" ? "curriculum" : "transcript";
+
+  const handleViewTabChange = (tab: "transcript" | "curriculum") => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (tab === "curriculum") next.set("tab", "curriculum");
+      else next.delete("tab");
+      return next;
+    });
+  };
+
   const { data: user } = useAuthUser();
   const studentId = user?.user_code || user?.id;
   const { data: activeSemester } = useActiveSemester();
@@ -617,10 +633,16 @@ export const StudentAcademicRecordPage = () => {
                       "px-1.5 py-0.5 text-[10px] font-semibold",
                       isGraduated || cumulativeGpa >= 3.0
                         ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-blue-200 bg-blue-50 text-blue-700"
+                        : cumulativeGpa > 0 && cumulativeGpa < 2.0
+                          ? "border-rose-200 bg-rose-50 text-rose-700"
+                          : "border-blue-200 bg-blue-50 text-blue-700"
                     )}
                   >
-                    {isGraduated ? "Completed" : "Good Standing"}
+                    {isGraduated
+                      ? "Completed"
+                      : cumulativeGpa > 0 && cumulativeGpa < 2.0
+                        ? "Academic Warning"
+                        : "Good Standing"}
                   </Badge>
                 </div>
                 <p className="mt-1 text-xs font-medium text-slate-500">
@@ -678,7 +700,45 @@ export const StudentAcademicRecordPage = () => {
         </div>
       </div>
 
-      {/* 3. Unified Semester Results & Course Transcript (Newest to Oldest) */}
+      {/* View Switcher: Transcript vs Curriculum & Prerequisites */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
+        <button
+          type="button"
+          onClick={() => handleViewTabChange("transcript")}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all cursor-pointer",
+            activeViewTab === "transcript"
+              ? "bg-blue-600 text-white shadow-2xs"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50",
+          )}
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+          <span>Bảng điểm theo Học kỳ</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleViewTabChange("curriculum")}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all cursor-pointer",
+            activeViewTab === "curriculum"
+              ? "bg-blue-600 text-white shadow-2xs"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50",
+          )}
+        >
+          <Layers className="h-3.5 w-3.5" />
+          <span>Khung CTĐT &amp; Môn tiên quyết</span>
+        </button>
+      </div>
+
+      {activeViewTab === "curriculum" ? (
+        <CurriculumProgressTab
+          studentCohort={studentDetail?.cohort}
+          enrollments={enrollments ?? []}
+          currentCourses={currentCourses ?? []}
+          allCourses={allCourses ?? []}
+        />
+      ) : (
+      /* 3. Unified Semester Results & Course Transcript (Newest to Oldest) */
       <Card className="border-slate-200 bg-white shadow-xs">
         <CardHeader className="pb-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1105,6 +1165,7 @@ export const StudentAcademicRecordPage = () => {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 };
