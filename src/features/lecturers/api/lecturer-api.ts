@@ -1,4 +1,4 @@
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import {
   ACTIVE_SEMESTER_QUERY_KEY,
@@ -6,10 +6,11 @@ import {
   useActiveSemester,
 } from "@/hooks/use-active-semester";
 import type {
+  ClassPrediction,
+  CourseAssessment,
+  Enrollment,
   LecturerCurrentClassItem,
   LecturerDetail,
-  Enrollment,
-  ClassPrediction,
 } from "@/types";
 
 export {
@@ -31,6 +32,9 @@ export const CLASS_PREDICTIONS_QUERY_KEY = (
   classId?: string,
   includeShap: boolean = true
 ) => ["predictions", "classes", classId, includeShap] as const;
+
+export const COURSE_ASSESSMENT_QUERY_KEY = (courseCode?: string) =>
+  ["courses", courseCode, "assessment"] as const;
 
 /**
  * Fetch classes taught by lecturer in the current active semester
@@ -140,6 +144,31 @@ export const getClassPredictions = async (
   }
 };
 
+/**
+ * Fetch course grading weights breakdown
+ * GET /api/v1/courses/{course_code}/assessment
+ */
+export const getCourseAssessment = async (
+  courseCode: string
+): Promise<CourseAssessment | null> => {
+  try {
+    const response = await apiClient.get<CourseAssessment>(
+      `/courses/${courseCode}/assessment`
+    );
+    return response.data;
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error &&
+      (error as { response?: { status?: number } }).response?.status === 404
+    ) {
+      return null;
+    }
+    throw error;
+  }
+};
+
 // ==========================================
 // TanStack Query Hooks
 // ==========================================
@@ -190,5 +219,28 @@ export const useAllClassesEnrollments = (classIds: string[]) => {
       queryFn: () => getClassEnrollments(classId),
       staleTime: 5 * 60 * 1000,
     })),
+  });
+};
+
+export const useAllClassesPredictions = (
+  classIds: string[],
+  includeShap: boolean = true
+) => {
+  return useQueries({
+    queries: classIds.map((classId) => ({
+      queryKey: CLASS_PREDICTIONS_QUERY_KEY(classId, includeShap),
+      queryFn: () => getClassPredictions(classId, includeShap),
+      staleTime: 5 * 60 * 1000,
+      retry: false,
+    })),
+  });
+};
+
+export const useCourseAssessment = (courseCode?: string) => {
+  return useQuery({
+    queryKey: COURSE_ASSESSMENT_QUERY_KEY(courseCode),
+    queryFn: () => getCourseAssessment(courseCode!),
+    enabled: Boolean(courseCode),
+    staleTime: 30 * 60 * 1000,
   });
 };

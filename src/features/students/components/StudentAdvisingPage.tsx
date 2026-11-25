@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   UserCheck,
@@ -15,15 +15,16 @@ import {
   Phone,
   MapPin,
   CheckCircle2,
+  CheckCheck,
   GraduationCap,
   Search,
   Building2,
-  Plus,
   ListTodo,
   TrendingDown,
   Info,
   CalendarCheck,
   Video,
+  XCircle,
 } from "lucide-react";
 import {
   Card,
@@ -41,7 +42,11 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuthUser } from "@/features/auth";
-import { useActiveSemester, formatSemesterLabel } from "@/hooks/use-active-semester";
+import {
+  useActiveSemester,
+  formatSemesterLabel,
+} from "@/hooks/use-active-semester";
+import type { AppointmentStatus } from "@/types";
 import {
   useStudentDetail,
   useStudentCurrentCourses,
@@ -53,8 +58,10 @@ import {
   useCreateOrGetAdvisingSession,
   useSessionMessages,
   useSendMessage,
+  useMarkSessionRead,
   useSessionAppointments,
   useCreateAppointment,
+  useUpdateAppointmentStatus,
   useSessionTasks,
   useToggleTask,
 } from "@/features/advising/api/advising-api";
@@ -68,6 +75,7 @@ export type AdvisingTab = "feed" | "booking" | "action-plan";
 export interface AdvisorDirectoryItem {
   id: string;
   isFacultyAdvisor: boolean;
+  lecturerId?: string;
   name: string;
   title: string;
   department: string;
@@ -84,19 +92,6 @@ export interface AdvisorDirectoryItem {
   failProbability?: number;
 }
 
-export interface GuidanceFeedItem {
-  id: string;
-  advisorId: string;
-  type: "warning" | "office_hours" | "project_guidance" | "message";
-  title: string;
-  content: string;
-  timestamp: string;
-  tag: string;
-  tagColor: "blue" | "sky" | "emerald" | "amber" | "purple";
-  senderName: string;
-  senderRole: string;
-}
-
 export interface DirectMessage {
   id: string;
   advisorId: string;
@@ -104,7 +99,8 @@ export interface DirectMessage {
   senderName: string;
   content: string;
   timestamp: string;
-  isQuickRequest?: boolean;
+  messageType?: string;
+  isRead?: boolean;
 }
 
 export interface BookingAppointment {
@@ -115,7 +111,7 @@ export interface BookingAppointment {
   timeSlot: string;
   meetingType: "OFFICE" | "ONLINE";
   notes?: string;
-  status: "CONFIRMED" | "PENDING" | "COMPLETED";
+  status: AppointmentStatus;
   createdAt: string;
   location: string;
 }
@@ -145,13 +141,23 @@ function getInitials(name: string): string {
 function getDepartmentByCode(courseCode: string): string {
   const code = courseCode.toUpperCase();
   if (code.startsWith("CO")) {
-    if (code.includes("2007") || code.includes("2009")) return "Bộ môn Kỹ thuật Máy tính";
-    if (code.includes("2017") || code.includes("3011")) return "Bộ môn Hệ thống & Mạng Máy tính";
-    if (code.includes("2013") || code.includes("3021")) return "Bộ môn Hệ thống Thông tin";
+    if (code.includes("2007") || code.includes("2009")) {
+      return "Bộ môn Kỹ thuật Máy tính";
+    }
+    if (code.includes("2017") || code.includes("3011")) {
+      return "Bộ môn Hệ thống & Mạng Máy tính";
+    }
+    if (code.includes("2013") || code.includes("3021")) {
+      return "Bộ môn Hệ thống Thông tin";
+    }
     return "Khoa Khoa học & Kỹ thuật Máy tính";
   }
-  if (code.startsWith("MT")) return "Bộ môn Toán Ứng dụng - Khoa Khoa học Ứng dụng";
-  if (code.startsWith("PH")) return "Bộ môn Vật lý Ứng dụng - Khoa Khoa học Ứng dụng";
+  if (code.startsWith("MT")) {
+    return "Bộ môn Toán Ứng dụng - Khoa Khoa học Ứng dụng";
+  }
+  if (code.startsWith("PH")) {
+    return "Bộ môn Vật lý Ứng dụng - Khoa Khoa học Ứng dụng";
+  }
   if (code.startsWith("EN") || code.startsWith("LA")) return "Khoa Ngoại ngữ";
   return "Khoa Khoa học & Kỹ thuật Máy tính";
 }
@@ -168,6 +174,20 @@ function getOfficeLocation(courseCode: string): string {
   return "P.304 Nhà H6, Cơ sở Dĩ An";
 }
 
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "response" in err &&
+    typeof (err as { response?: { data?: { detail?: unknown } } }).response
+      ?.data?.detail === "string"
+  ) {
+    return (err as { response: { data: { detail: string } } }).response.data
+      .detail;
+  }
+  return fallback;
+}
+
 // ==========================================
 // Main Component
 // ==========================================
@@ -175,30 +195,33 @@ function getOfficeLocation(courseCode: string): string {
 export const StudentAdvisingPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: user } = useAuthUser();
-  const studentId = user?.user_code || user?.id || "2028899";
+  const studentId = user?.user_code || user?.id || "";
   const { data: activeSemester } = useActiveSemester();
   const activeSemesterCode = activeSemester?.semester_code || "HK261";
   const activeSemesterLabel = formatSemesterLabel(activeSemesterCode);
 
   // Data fetching
-  const { data: currentCourses, isLoading: isLoadingCourses } = useStudentCurrentCourses(studentId);
-  const { data: predictions, isLoading: isLoadingPreds } = useStudentPredictions(studentId, activeSemesterCode);
+  const { data: currentCourses, isLoading: isLoadingCourses } =
+    useStudentCurrentCourses(studentId);
+  const { data: predictions, isLoading: isLoadingPreds } =
+    useStudentPredictions(studentId, activeSemesterCode);
   const { data: studentDetail } = useStudentDetail(studentId);
   const { data: studentSummary } = useStudentSummary(studentId);
 
-  // Active Tab state (feed | booking | action-plan)
-  const [activeTab, setActiveTab] = useState<AdvisingTab>(() => {
-    const tabParam = searchParams.get("tab");
-    if (tabParam === "booking" || tabParam === "action-plan") return tabParam;
-    return "feed";
-  });
+  // Active Tab derived from URL search params (so clicking notifications updates tab immediately)
+  const tabParam = searchParams.get("tab");
+  const activeTab: AdvisingTab =
+    tabParam === "booking" || tabParam === "action-plan" ? tabParam : "feed";
 
   // Search keyword in directory
   const [searchQuery, setSearchQuery] = useState("");
 
   // Build predictions lookup map
   const predMap = useMemo(() => {
-    const map = new Map<string, { risk_level: "HIGH" | "MEDIUM" | "LOW"; fail_prob: number }>();
+    const map = new Map<
+      string,
+      { risk_level: "HIGH" | "MEDIUM" | "LOW"; fail_prob: number }
+    >();
     if (predictions?.courses) {
       for (const item of predictions.courses) {
         map.set(item.course_code.toUpperCase(), {
@@ -210,118 +233,77 @@ export const StudentAdvisingPage = () => {
     return map;
   }, [predictions]);
 
-  // Build directory list: Faculty Academic Advisor (pinned) + Course Lecturers
+  // Build directory list: Course Lecturers from API + Faculty Office Contact
   const advisors = useMemo<AdvisorDirectoryItem[]>(() => {
     const list: AdvisorDirectoryItem[] = [];
 
-    // 1. Primary Faculty Academic Advisor (Pinned)
+    // 1. Active Course Lecturers from API
+    const validCourses = (currentCourses ?? []).filter((c) => {
+      const code = c.course_code.toUpperCase();
+      return (
+        !code.startsWith("CC") &&
+        !code.startsWith("TN") &&
+        !code.startsWith("QP")
+      );
+    });
+
+    for (const course of validCourses) {
+      const pred = predMap.get(course.course_code.toUpperCase());
+      const lecturerName =
+        course.lecturer_name?.trim() || "Thầy/Cô Phụ trách Môn";
+      const emailSlug = lecturerName
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+
+      list.push({
+        id: `course-${course.course_code}`,
+        isFacultyAdvisor: false,
+        lecturerId: course.lecturer_id || undefined,
+        name:
+          lecturerName.startsWith("TS.") ||
+          lecturerName.startsWith("ThS.") ||
+          lecturerName.startsWith("PGS.")
+            ? lecturerName
+            : `GV. ${lecturerName}`,
+        title: `Giảng viên phụ trách môn ${course.course_code}`,
+        department: getDepartmentByCode(course.course_code),
+        courseCode: course.course_code,
+        courseName: course.course_name,
+        classGroup: course.class_group || undefined,
+        credits: Number(course.credits) || 3,
+        office: getOfficeLocation(course.course_code),
+        email: `${emailSlug || "giangvien"}@hcmut.edu.vn`,
+        phone: "(028) 3864 7256 - Văn phòng Bộ môn",
+        officeHours: "Thứ Ba & Thứ Sáu: 14:00 - 16:30",
+        availableSlots: [
+          "Thứ Ba: 14:00 - 15:00 (Trực tiếp tại Bộ môn)",
+          "Thứ Ba: 15:30 - 16:30 (Trực tiếp tại Bộ môn)",
+          "Thứ Sáu: 14:00 - 15:00 (Online Google Meet)",
+        ],
+        riskLevel: pred?.risk_level,
+        failProbability: pred?.fail_prob,
+      });
+    }
+
+    // 2. Institutional Faculty Academic Advising Office (Contact Reference)
     const advisorMajor = studentDetail?.major || "Khoa học Máy tính";
-    const facultyAdvisor: AdvisorDirectoryItem = {
+    list.push({
       id: "advisor-faculty",
       isFacultyAdvisor: true,
-      name: "TS. Lê Văn Tuấn",
+      name: "Văn phòng Cố vấn Học vụ Khoa",
       title: `Cố vấn Học tập Chuyên ngành ${advisorMajor}`,
       department: "Văn phòng Cố vấn Học vụ - Khoa KH&KT Máy tính",
       office: "P.304 Nhà H6, Cơ sở Dĩ An",
-      email: "tuan.le@hcmut.edu.vn",
+      email: "covanhoctap.cse@hcmut.edu.vn",
       phone: "(028) 3864 7256 - Ext: 5842",
       officeHours: "Thứ Hai & Thứ Năm: 08:30 - 11:30",
       availableSlots: [
         "Thứ Hai: 08:30 - 09:30 (Trực tiếp P.304 H6)",
-        "Thứ Hai: 10:00 - 11:00 (Trực tiếp P.304 H6)",
-        "Thứ Năm: 08:30 - 09:30 (Online Google Meet)",
-        "Thứ Năm: 14:00 - 15:30 (Trực tiếp P.304 H6)",
+        "Thứ Năm: 08:30 - 09:30 (Trực tiếp P.304 H6)",
       ],
-    };
-    list.push(facultyAdvisor);
-
-    // 2. Active Course Lecturers from API
-    const validCourses = (currentCourses ?? []).filter((c) => {
-      const code = c.course_code.toUpperCase();
-      return !code.startsWith("CC") && !code.startsWith("TN") && !code.startsWith("QP");
     });
-
-    if (validCourses.length > 0) {
-      for (const course of validCourses) {
-        const pred = predMap.get(course.course_code.toUpperCase());
-        const lecturerName = course.lecturer_name?.trim() || "Thầy/Cô Phụ trách Môn";
-        const emailSlug = lecturerName
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .toLowerCase()
-          .replace(/[^a-z0-9]/g, "");
-
-        list.push({
-          id: `course-${course.course_code}`,
-          isFacultyAdvisor: false,
-          name: lecturerName.startsWith("TS.") || lecturerName.startsWith("ThS.") ? lecturerName : `ThS. ${lecturerName}`,
-          title: `Giảng viên phụ trách môn ${course.course_code}`,
-          department: getDepartmentByCode(course.course_code),
-          courseCode: course.course_code,
-          courseName: course.course_name,
-          classGroup: course.class_group || undefined,
-          credits: Number(course.credits) || 3,
-          office: getOfficeLocation(course.course_code),
-          email: `${emailSlug || "giangvien"}@hcmut.edu.vn`,
-          phone: "(028) 3864 7256 - Văn phòng Bộ môn",
-          officeHours: "Thứ Ba & Thứ Sáu: 14:00 - 16:30",
-          availableSlots: [
-            "Thứ Ba: 14:00 - 15:00 (Trực tiếp tại Bộ môn)",
-            "Thứ Ba: 15:30 - 16:30 (Trực tiếp tại Bộ môn)",
-            "Thứ Sáu: 14:00 - 15:00 (Online Google Meet)",
-          ],
-          riskLevel: pred?.risk_level || "LOW",
-          failProbability: pred?.fail_prob || 0.05,
-        });
-      }
-    } else {
-      // Fallback default courses for HK261 if API returns empty
-      list.push(
-        {
-          id: "course-CO2007",
-          isFacultyAdvisor: false,
-          name: "TS. Bùi Quang Hà",
-          title: "Giảng viên phụ trách môn CO2007",
-          department: "Bộ môn Kỹ thuật Máy tính",
-          courseCode: "CO2007",
-          courseName: "Kiến trúc Máy tính",
-          classGroup: "CC06",
-          credits: 4,
-          office: "P.503 Nhà H6, Cơ sở Dĩ An",
-          email: "ha.bui@hcmut.edu.vn",
-          phone: "(028) 3864 7256 - Ext: 5840",
-          officeHours: "Thứ Ba: 14:00 - 16:30 (P.503 H6)",
-          availableSlots: [
-            "Thứ Ba: 14:00 - 15:00 (Trực tiếp P.503 H6)",
-            "Thứ Ba: 15:30 - 16:30 (Trực tiếp P.503 H6)",
-            "Thứ Sáu: 09:00 - 10:00 (Online Meet)",
-          ],
-          riskLevel: "HIGH",
-          failProbability: 0.42,
-        },
-        {
-          id: "course-CO2017",
-          isFacultyAdvisor: false,
-          name: "TS. Nguyễn Đức Dũng",
-          title: "Giảng viên phụ trách môn CO2017",
-          department: "Bộ môn Hệ thống & Mạng Máy tính",
-          courseCode: "CO2017",
-          courseName: "Hệ điều hành",
-          classGroup: "L01",
-          credits: 3,
-          office: "P.502 Nhà H6, Cơ sở Dĩ An",
-          email: "dung.nguyen@hcmut.edu.vn",
-          phone: "(028) 3864 7256 - Ext: 5838",
-          officeHours: "Thứ Năm: 13:30 - 15:30 (P.502 H6)",
-          availableSlots: [
-            "Thứ Năm: 13:30 - 14:30 (Trực tiếp P.502 H6)",
-            "Thứ Năm: 14:30 - 15:30 (Trực tiếp P.502 H6)",
-          ],
-          riskLevel: "MEDIUM",
-          failProbability: 0.28,
-        },
-      );
-    }
 
     return list;
   }, [studentDetail, currentCourses, predMap]);
@@ -339,26 +321,26 @@ export const StudentAdvisingPage = () => {
     );
   }, [advisors, searchQuery]);
 
-  // Active selected advisor ID
-  const [selectedAdvisorId, setSelectedAdvisorId] = useState<string>(() => {
-    const courseParam = searchParams.get("course");
-    if (courseParam) return `course-${courseParam}`;
-    return "advisor-faculty";
-  });
+  // Active selected advisor derived from ?course= / ?advisor= URL params
+  const courseParam = searchParams.get("course");
+  const advisorParam = searchParams.get("advisor");
 
   const selectedAdvisor = useMemo(() => {
-    const found = advisors.find((a) => a.id === selectedAdvisorId);
-    return found || advisors[0];
-  }, [advisors, selectedAdvisorId]);
-
-  const handleSelectAdvisor = (advisorId: string) => {
-    setSelectedAdvisorId(advisorId);
-    setCustomSlot(null);
-  };
+    if (advisorParam) {
+      const found = advisors.find((a) => a.id === advisorParam);
+      if (found) return found;
+    }
+    if (courseParam) {
+      const found = advisors.find(
+        (a) => a.courseCode?.toUpperCase() === courseParam.toUpperCase(),
+      );
+      if (found) return found;
+    }
+    return advisors[0];
+  }, [advisors, advisorParam, courseParam]);
 
   // Sync tab change with URL search params
   const handleTabChange = (tab: AdvisingTab) => {
-    setActiveTab(tab);
     setSearchParams((prev) => {
       const p = new URLSearchParams(prev);
       p.set("tab", tab);
@@ -367,562 +349,307 @@ export const StudentAdvisingPage = () => {
   };
 
   // ==========================================
-  // Tab 1: Guidance Feed & Messages State
-  // ==========================================
-
-  // Initial Guidance Announcements per advisor
-  const defaultFeedMap = useMemo<Record<string, GuidanceFeedItem[]>>(() => {
-    return {
-      "advisor-faculty": [
-        {
-          id: "feed-fac-1",
-          advisorId: "advisor-faculty",
-          type: "warning",
-          title: "Định hướng học vụ & kế hoạch học tập giữa kỳ HK261",
-          content:
-            "Khoa đã cập nhật phân tích học lực sau các bài thi giữa kỳ. Đối với các sinh viên có môn học cần cải thiện điểm số, đề nghị các em chủ động liên hệ giảng viên bộ môn hoặc đăng ký lịch tư vấn với Thầy trong tuần này để xây dựng lộ trình nâng cao kết quả.",
-          timestamp: "Hôm nay, 08:30",
-          tag: "Định hướng học vụ",
-          tagColor: "blue",
-          senderName: "TS. Lê Văn Tuấn",
-          senderRole: "Cố vấn Học tập Khoa",
-        },
-        {
-          id: "feed-fac-2",
-          advisorId: "advisor-faculty",
-          type: "office_hours",
-          title: "Lịch tiếp sinh viên định kỳ tại Văn phòng Khoa",
-          content:
-            "Văn phòng cố vấn học vụ mở cửa tiếp sinh viên định kỳ vào sáng Thứ Hai và Thứ Năm hàng tuần (08:30 - 11:30) tại P.304 Nhà H6. Sinh viên cần tư vấn phương án đăng ký môn, cải thiện GPA hoặc gỡ cảnh cáo học vụ có thể đăng ký lịch trước ở Tab Đặt lịch hẹn.",
-          timestamp: "10/11/2026, 14:00",
-          tag: "Giờ tiếp sinh viên",
-          tagColor: "blue",
-          senderName: "TS. Lê Văn Tuấn",
-          senderRole: "Cố vấn Học tập Khoa",
-        },
-        {
-          id: "feed-fac-3",
-          advisorId: "advisor-faculty",
-          type: "project_guidance",
-          title: "Khảo sát nguyện vọng phân chuyên ngành & Đồ án tốt nghiệp",
-          content:
-            "Đối với sinh viên chuẩn bị bước vào giai đoạn năm cuối, đề nghị kiểm tra kỹ số tín chỉ tích lũy hiện tại và các môn tiên quyết bắt buộc trước khi đăng ký Hội đồng Khóa luận tốt nghiệp kỳ sau.",
-          timestamp: "05/11/2026, 09:15",
-          tag: "Lộ trình đào tạo",
-          tagColor: "purple",
-          senderName: "TS. Lê Văn Tuấn",
-          senderRole: "Cố vấn Học tập Khoa",
-        },
-      ],
-      "course-CO2007": [
-        {
-          id: "feed-co2007-1",
-          advisorId: "course-CO2007",
-          type: "warning",
-          title: "Lưu ý phần kiến thức bài thi Giữa kỳ CO2007",
-          content:
-            "Thầy nhận thấy qua bài thi giữa kỳ, nhiều bạn còn bị nhầm lẫn giữa Data Hazard và Control Hazard trong kỹ thuật Pipelining, cũng như cách tính Miss Penalty trong bộ nhớ Cache. Các em cần xem lại slide chương 4 và giải lại đề bài tập ôn tập tại LMS tuần 9.",
-          timestamp: "Hôm qua, 15:45",
-          tag: "Lưu ý bài thi Giữa kỳ",
-          tagColor: "sky",
-          senderName: "TS. Bùi Quang Hà",
-          senderRole: "Giảng viên Phụ trách",
-        },
-        {
-          id: "feed-co2007-2",
-          advisorId: "course-CO2007",
-          type: "project_guidance",
-          title: "Tiến độ Bài tập lớn MIPS & Đánh giá mô phỏng",
-          content:
-            "Hạn chót nộp Báo cáo giai đoạn 1 (Thiết kế tập lệnh MIPS) vào Chủ nhật tuần 11. Các nhóm cần kiểm tra kỹ kịch bản kiểm thử (Testbench) trên Logisim hoặc Verilog trước khi demo.",
-          timestamp: "12/11/2026, 10:20",
-          tag: "Tiến độ Bài tập lớn",
-          tagColor: "purple",
-          senderName: "TS. Bùi Quang Hà",
-          senderRole: "Giảng viên Phụ trách",
-        },
-        {
-          id: "feed-co2007-3",
-          advisorId: "course-CO2007",
-          type: "office_hours",
-          title: "Giờ tiếp sinh viên & Phụ đạo thực hành tại Lab",
-          content:
-            "Thầy sẽ có mặt tại P.503 Nhà H6 vào chiều Thứ Ba từ 14:00 đến 16:30 để giải đáp thắc mắc bài thi và hỗ trợ gỡ lỗi bài tập lớn. Sinh viên có thể ghé trực tiếp hoặc đặt lịch trước.",
-          timestamp: "08/11/2026, 09:00",
-          tag: "Office Hours",
-          tagColor: "blue",
-          senderName: "TS. Bùi Quang Hà",
-          senderRole: "Giảng viên Phụ trách",
-        },
-      ],
-      "course-CO2017": [
-        {
-          id: "feed-co2017-1",
-          advisorId: "course-CO2017",
-          type: "warning",
-          title: "Nhắc nhở thực hành Lab Hệ điều hành (xv6 Kernel)",
-          content:
-            "Yêu cầu sinh viên hoàn thành bài thực hành Lab 2 (Process Scheduling & Mutex Lock) đúng hạn. Đây là nền tảng quan trọng cho 30% nội dung câu hỏi trong đề thi Cuối kỳ.",
-          timestamp: "14/11/2026, 11:00",
-          tag: "Thực hành Lab",
-          tagColor: "amber",
-          senderName: "TS. Nguyễn Đức Dũng",
-          senderRole: "Giảng viên Phụ trách",
-        },
-        {
-          id: "feed-co2017-2",
-          advisorId: "course-CO2017",
-          type: "office_hours",
-          title: "Thông báo giờ tiếp sinh viên Bộ môn Mạng & Hệ thống",
-          content:
-            "Văn phòng P.502 Nhà H6 tiếp sinh viên vào chiều Thứ Năm (13:30 - 15:30). Các bạn gặp khó khăn trong việc cài đặt và debug mã nguồn xv6 có thể mang laptop đến để được hỗ trợ.",
-          timestamp: "11/11/2026, 16:30",
-          tag: "Office Hours",
-          tagColor: "blue",
-          senderName: "TS. Nguyễn Đức Dũng",
-          senderRole: "Giảng viên Phụ trách",
-        },
-      ],
-    };
-  }, []);
-
-  // ==========================================
   // Backend Advising Sessions & Queries
   // ==========================================
-  const { data: serverSessions } = useAdvisingSessions();
+  const { data: serverSessions } = useAdvisingSessions(Boolean(studentId));
   const createOrGetSessionMutation = useCreateOrGetAdvisingSession();
+  const markSessionReadMutation = useMarkSessionRead();
 
+  const handleSelectAdvisor = (advisorId: string) => {
+    setCustomSlot(null);
+    const chosen = advisors.find((a) => a.id === advisorId);
+    if (chosen?.courseCode && serverSessions) {
+      const matched = serverSessions.find(
+        (s) => s.course_code === chosen.courseCode,
+      );
+      if (matched && matched.unread_count > 0) {
+        markSessionReadMutation.mutate(matched.id);
+      }
+    }
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      if (chosen?.courseCode) {
+        p.set("course", chosen.courseCode);
+        p.delete("advisor");
+      } else {
+        p.set("advisor", advisorId);
+        p.delete("course");
+      }
+      return p;
+    });
+  };
+
+  // Map unread counts by course_code for left directory badges
+  const unreadByCourse = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of serverSessions ?? []) {
+      if (s.unread_count > 0) {
+        map.set(s.course_code, (map.get(s.course_code) ?? 0) + s.unread_count);
+      }
+    }
+    return map;
+  }, [serverSessions]);
+
+  // Strictly match selected course's session (NEVER fallback to serverSessions[0])
+  const selectedCourseCode = selectedAdvisor.courseCode;
   const activeSession = useMemo(() => {
-    if (!serverSessions || serverSessions.length === 0) return null;
-    const targetCourse = selectedAdvisor.courseCode || "CO2007";
+    if (!serverSessions || serverSessions.length === 0 || !selectedCourseCode) {
+      return null;
+    }
     return (
-      serverSessions.find((s) => s.course_code === targetCourse) ||
-      serverSessions[0] ||
+      serverSessions.find(
+        (s) =>
+          s.course_code === selectedCourseCode &&
+          s.semester_code === activeSemesterCode,
+      ) ??
+      serverSessions.find((s) => s.course_code === selectedCourseCode) ??
       null
     );
-  }, [serverSessions, selectedAdvisor.courseCode]);
+  }, [serverSessions, selectedCourseCode, activeSemesterCode]);
 
   const activeSessionId = activeSession?.id;
 
-  // Real-time Messages from Backend
-  const { data: serverMessages } = useSessionMessages(activeSessionId);
+  // Real-time Messages from Backend (GET uses mark_read=false so polling never wipes unread state)
+  const { data: serverMessages, isLoading: isLoadingMessages } =
+    useSessionMessages(activeSessionId, 50, 0, activeTab === "feed");
   const sendMessageMutation = useSendMessage(activeSessionId);
 
   // Real-time Appointments from Backend
-  const { data: serverAppointments } = useSessionAppointments(activeSessionId);
+  const { data: serverAppointments, isLoading: isLoadingAppointments } =
+    useSessionAppointments(activeSessionId);
   const createAppointmentMutation = useCreateAppointment(activeSessionId);
+  const updateAppointmentStatusMutation =
+    useUpdateAppointmentStatus(activeSessionId);
 
   // Real-time Tasks from Backend
-  const { data: serverTasks } = useSessionTasks(activeSessionId);
+  const { data: serverTasks, isLoading: isLoadingTasks } =
+    useSessionTasks(activeSessionId);
   const toggleTaskMutation = useToggleTask(activeSessionId);
 
-  // Persisted chat messages state (fallback)
-  const messageStorageKey = `aurora_advising_messages_${studentId}`;
-  const [messages, setMessages] = useState<DirectMessage[]>(() => {
-    try {
-      const saved = localStorage.getItem(messageStorageKey);
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
-    return [
-      {
-        id: "msg-1",
-        advisorId: "course-CO2007",
-        sender: "advisor",
-        senderName: "TS. Bùi Quang Hà",
-        content:
-          "Chào em, thầy đã xem điểm thi giữa kỳ của em. Em cần chú ý phần tính toán Cache Hit/Miss ratio để không bị mất điểm đáng tiếc trong bài thi cuối kỳ nhé.",
-        timestamp: "Hôm qua 16:00",
-      },
-      {
-        id: "msg-2",
-        advisorId: "advisor-faculty",
-        sender: "advisor",
-        senderName: "TS. Lê Văn Tuấn",
-        content:
-          "Chào em, kết quả học kỳ này rất quan trọng để đảm bảo tiến độ tốt nghiệp. Em nhớ theo dõi kỹ các bài tập lớn nhé.",
-        timestamp: "10/11/2026 14:15",
-      },
-    ];
-  });
+  const canCreateSession = Boolean(
+    selectedAdvisor && !selectedAdvisor.isFacultyAdvisor && selectedAdvisor.courseCode,
+  );
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(messageStorageKey, JSON.stringify(messages));
-    } catch {
-      // ignore
+  // Helper to ensure an advising session exists in DB for the selected course
+  const ensureSessionId = async (): Promise<string | null> => {
+    if (!studentId || !selectedAdvisor?.courseCode || selectedAdvisor.isFacultyAdvisor) {
+      toast.info(
+        "Vui lòng chọn một giảng viên môn học cụ thể để gửi trao đổi hoặc đặt lịch trực tuyến.",
+      );
+      return null;
     }
-  }, [messages, messageStorageKey]);
+    if (activeSessionId) return activeSessionId;
 
-  // Current chat input
+    const created = await createOrGetSessionMutation.mutateAsync({
+      student_id: studentId,
+      course_code: selectedAdvisor.courseCode,
+      semester_code: activeSemesterCode,
+      topic: `Cố vấn học vụ môn ${selectedAdvisor.courseCode}`,
+      risk_level:
+        selectedAdvisor.riskLevel === "HIGH"
+          ? "CRITICAL"
+          : selectedAdvisor.riskLevel === "MEDIUM"
+            ? "WARNING"
+            : "SAFE",
+      lecturer_id: selectedAdvisor.lecturerId,
+    });
+    return created.id;
+  };
+
+  // ==========================================
+  // Tab 1: Direct Messages
+  // ==========================================
   const [chatInput, setChatInput] = useState("");
 
-  // Send a custom message
-  const handleSendMessage = async (textToSend?: string, isQuick: boolean = false) => {
-    const content = (textToSend || chatInput).trim();
+  const handleSendMessage = async (textToSend?: string) => {
+    const content = (textToSend ?? chatInput).trim();
     if (!content) return;
 
-    const newMsg: DirectMessage = {
-      id: `msg-${Date.now()}`,
-      advisorId: selectedAdvisor.id,
-      sender: "student",
-      senderName: user?.name || "Sinh viên",
-      content,
-      timestamp: "Vừa xong",
-      isQuickRequest: isQuick,
-    };
-
-    setMessages((prev) => [...prev, newMsg]);
-    if (!textToSend) setChatInput("");
-
-    // Send to Backend
     try {
-      let targetSessionId = activeSessionId;
-      if (!targetSessionId) {
-        const created = await createOrGetSessionMutation.mutateAsync({
-          student_id: studentId,
-          course_code: selectedAdvisor.courseCode || "CO2007",
-          topic: `Cố vấn học vụ môn ${selectedAdvisor.courseCode || "Chuyên ngành"}`,
-          risk_level:
-            selectedAdvisor.riskLevel === "HIGH"
-              ? "CRITICAL"
-              : selectedAdvisor.riskLevel === "MEDIUM"
-                ? "WARNING"
-                : "SAFE",
-          lecturer_id: selectedAdvisor.id.startsWith("course-")
-            ? undefined
-            : "GV00001",
-        });
-        targetSessionId = created.id;
-      }
-      if (targetSessionId) {
-        await sendMessageMutation.mutateAsync({
+      const targetSessionId = await ensureSessionId();
+      if (!targetSessionId) return;
+
+      await sendMessageMutation.mutateAsync({
+        sessionId: targetSessionId,
+        payload: {
           content,
           message_type: "REPLY",
-        });
+        },
+      });
+      if ((activeSession?.unread_count ?? 0) > 0) {
+        markSessionReadMutation.mutate(targetSessionId);
       }
-    } catch {
-      // Fallback: message is already kept locally
+      if (!textToSend) setChatInput("");
+      toast.success("Đã gửi tin nhắn tới Thầy/Cô thành công!");
+    } catch (err) {
+      toast.error(
+        extractErrorMessage(
+          err,
+          "Không thể gửi tin nhắn. Vui lòng kiểm tra kết nối máy chủ và thử lại.",
+        ),
+      );
     }
-
-    toast.success("Đã gửi tin nhắn tới Thầy/Cô thành công!");
   };
 
-  // Quick Request Triggers
-  const handleQuickRequest = (type: "materials" | "midterm_review" | "study_group") => {
+  const handleQuickRequest = (
+    type: "materials" | "midterm_review" | "study_group",
+  ) => {
+    if (!selectedAdvisor?.courseCode) {
+      toast.info("Vui lòng chọn một môn học cụ thể để gửi yêu cầu nhanh.");
+      return;
+    }
     let text = "";
     if (type === "materials") {
-      text = selectedAdvisor.isFacultyAdvisor
-        ? "Dạ kính chào Thầy, em xin Thầy hướng dẫn thêm về quy chế học vụ và tài liệu định hướng lộ trình tốt nghiệp ngành ạ."
-        : `Dạ kính chào Thầy, em xin phép nhờ Thầy chia sẻ thêm tài liệu và bộ câu hỏi bài tập ôn tập bổ trợ cho môn ${selectedAdvisor.courseCode} với ạ. Em xin cảm ơn Thầy!`;
+      text = `Dạ kính chào Thầy/Cô, em xin phép nhờ Thầy/Cô chia sẻ thêm tài liệu và bộ câu hỏi bài tập ôn tập bổ trợ cho môn ${selectedAdvisor.courseCode} với ạ. Em xin cảm ơn!`;
     } else if (type === "midterm_review") {
-      text = selectedAdvisor.isFacultyAdvisor
-        ? "Dạ Thầy cho em xin lời khuyên về phương án gỡ điểm các môn sau kỳ thi giữa kỳ với ạ."
-        : `Dạ kính chào Thầy, em muốn xin Thầy giải đáp thắc mắc và xem lại bài thi giữa kỳ môn ${selectedAdvisor.courseCode} để nắm rõ phần kiến thức em còn làm sai ạ.`;
+      text = `Dạ kính chào Thầy/Cô, em muốn xin giải đáp thắc mắc và xem lại bài thi giữa kỳ môn ${selectedAdvisor.courseCode} để nắm rõ phần kiến thức em còn làm sai ạ.`;
     } else {
-      text = selectedAdvisor.isFacultyAdvisor
-        ? "Dạ Thầy có thể hỗ trợ kết nối em với các anh chị khóa trên hoặc câu lạc bộ học thuật để sinh hoạt nhóm không ạ?"
-        : `Dạ kính chào Thầy, em muốn nhờ Thầy và Ban cán sự hỗ trợ kết nối em vào nhóm học tập (Study Group) của môn ${selectedAdvisor.courseCode} để cùng ôn bài ạ.`;
+      text = `Dạ kính chào Thầy/Cô, em muốn nhờ hỗ trợ kết nối em vào nhóm học tập (Study Group) của môn ${selectedAdvisor.courseCode} để cùng ôn bài ạ.`;
     }
-
-    handleSendMessage(text, true);
+    void handleSendMessage(text);
   };
 
-  // Messages for currently selected advisor
-  const currentAdvisorMessages = useMemo(() => {
-    if (serverMessages && serverMessages.length > 0) {
-      return serverMessages.map((m) => ({
-        id: m.id,
-        advisorId: selectedAdvisor.id,
-        sender: (m.sender_role.toLowerCase() === "student"
-          ? "student"
-          : "advisor") as "student" | "advisor",
-        senderName: m.sender_name,
-        content: m.content,
-        timestamp: new Date(m.created_at).toLocaleTimeString("vi-VN", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        isQuickRequest: false,
-      }));
-    }
-    return messages.filter((m) => m.advisorId === selectedAdvisor.id);
-  }, [serverMessages, messages, selectedAdvisor.id]);
-
-  // Guidance feeds for currently selected advisor
-  const currentAdvisorFeeds = useMemo(() => {
-    return defaultFeedMap[selectedAdvisor.id] || [
-      {
-        id: `feed-${selectedAdvisor.id}-default`,
-        advisorId: selectedAdvisor.id,
-        type: "office_hours",
-        title: `Lịch tiếp sinh viên môn ${selectedAdvisor.courseCode || "học kỳ"}`,
-        content: `Thầy tiếp sinh viên hàng tuần tại ${selectedAdvisor.office} vào khung giờ: ${selectedAdvisor.officeHours}. Các em có câu hỏi chuyên môn vui lòng chuẩn bị trước nội dung.`,
-        timestamp: "Hôm nay, 08:00",
-        tag: "Office Hours",
-        tagColor: "blue",
-        senderName: selectedAdvisor.name,
-        senderRole: selectedAdvisor.title,
-      },
-    ];
-  }, [defaultFeedMap, selectedAdvisor]);
+  const currentAdvisorMessages = useMemo<DirectMessage[]>(() => {
+    if (!activeSessionId || !serverMessages) return [];
+    return serverMessages.map((m) => ({
+      id: m.id,
+      advisorId: selectedAdvisor.id,
+      sender:
+        m.sender_role.toLowerCase() === "student" ? "student" : "advisor",
+      senderName: m.sender_name,
+      content: m.content,
+      timestamp: new Date(m.created_at).toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      messageType: m.message_type,
+      isRead: m.is_read,
+    }));
+  }, [activeSessionId, serverMessages, selectedAdvisor.id]);
 
   // ==========================================
-  // Tab 2: Booking State & Logic
+  // Tab 2: Office Hours Booking
   // ==========================================
-
-  const bookingStorageKey = `aurora_advising_bookings_${studentId}`;
-  const [appointments, setAppointments] = useState<BookingAppointment[]>(() => {
-    try {
-      const saved = localStorage.getItem(bookingStorageKey);
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
-    return [
-      {
-        id: "book-1",
-        advisorId: "advisor-faculty",
-        advisorName: "TS. Lê Văn Tuấn",
-        subject: "Tư vấn lộ trình đăng ký môn học & phân chuyên ngành",
-        timeSlot: "Thứ Năm: 08:30 - 09:30 (Online Google Meet)",
-        meetingType: "ONLINE",
-        notes: "Em muốn tư vấn về điều kiện làm khóa luận tốt nghiệp kỳ tới.",
-        status: "CONFIRMED",
-        createdAt: "10/11/2026",
-        location: "Google Meet: meet.google.com/xai-aurora-adv",
-      },
-    ];
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(bookingStorageKey, JSON.stringify(appointments));
-    } catch {
-      // ignore
-    }
-  }, [appointments, bookingStorageKey]);
-
-  // Booking Form State
-  const [selectedReason, setSelectedReason] = useState<string>("Hỏi bài chưa hiểu");
+  const [selectedReason, setSelectedReason] = useState<string>(
+    "Hỏi bài chưa hiểu / giải đáp chuyên môn",
+  );
   const [customSlot, setCustomSlot] = useState<string | null>(null);
-  const selectedSlot = customSlot || selectedAdvisor.availableSlots[0] || "Thứ Hai: 08:30 - 09:30";
+  const selectedSlot =
+    customSlot ||
+    selectedAdvisor.availableSlots[0] ||
+    "Thứ Ba: 14:00 - 15:00";
   const [meetingType, setMeetingType] = useState<"OFFICE" | "ONLINE">("OFFICE");
   const [bookingNotes, setBookingNotes] = useState("");
 
   const handleCreateBooking = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const newBooking: BookingAppointment = {
-      id: `book-${crypto.randomUUID()}`,
-      advisorId: selectedAdvisor.id,
-      advisorName: selectedAdvisor.name,
-      subject: selectedReason,
-      timeSlot: selectedSlot,
-      meetingType,
-      notes: bookingNotes.trim() || undefined,
-      status: "PENDING",
-      createdAt: "Hôm nay",
-      location:
+    try {
+      const targetSessionId = await ensureSessionId();
+      if (!targetSessionId) return;
+
+      const location =
         meetingType === "OFFICE"
           ? selectedAdvisor.office
-          : "Google Meet (Sẽ gửi link qua email sinh viên)",
-    };
+          : "Google Meet (Sẽ gửi link qua email sinh viên)";
 
-    setAppointments((prev) => [newBooking, ...prev]);
-    setBookingNotes("");
-    setCustomSlot(null);
-
-    // Call Backend
-    try {
-      let targetSessionId = activeSessionId;
-      if (!targetSessionId) {
-        const created = await createOrGetSessionMutation.mutateAsync({
-          student_id: studentId,
-          course_code: selectedAdvisor.courseCode || "CO2007",
-          topic: `Cố vấn học vụ môn ${selectedAdvisor.courseCode || "Chuyên ngành"}`,
-        });
-        targetSessionId = created.id;
-      }
-      if (targetSessionId) {
-        await createAppointmentMutation.mutateAsync({
+      await createAppointmentMutation.mutateAsync({
+        sessionId: targetSessionId,
+        payload: {
           subject: selectedReason,
           time_slot: selectedSlot,
           meeting_type: meetingType,
-          location:
-            meetingType === "OFFICE"
-              ? selectedAdvisor.office
-              : "Google Meet (Sẽ gửi link qua email sinh viên)",
+          location,
           notes: bookingNotes.trim() || null,
-        });
-      }
-    } catch {
-      // Fallback: stored in local appointments
-    }
+        },
+      });
 
-    toast.success("Phiếu hẹn tư vấn đã được gửi thành công!", {
-      description: `Lịch hẹn với ${selectedAdvisor.name} đang ở trạng thái Chờ duyệt.`,
-    });
+      setBookingNotes("");
+      setCustomSlot(null);
+      toast.success("Phiếu hẹn tư vấn đã được gửi thành công!", {
+        description: `Lịch hẹn với ${selectedAdvisor.name} đang ở trạng thái Chờ duyệt.`,
+      });
+    } catch (err) {
+      toast.error(
+        extractErrorMessage(
+          err,
+          "Không thể gửi phiếu hẹn tư vấn. Vui lòng thử lại sau.",
+        ),
+      );
+    }
   };
 
-  const currentAppointments = useMemo(() => {
-    if (serverAppointments && serverAppointments.length > 0) {
-      return serverAppointments.map((a) => ({
-        id: a.id,
-        advisorId: selectedAdvisor.id,
-        advisorName: selectedAdvisor.name,
-        subject: a.subject,
-        timeSlot: a.time_slot,
-        meetingType: a.meeting_type,
-        notes: a.notes || undefined,
-        status: a.status as "CONFIRMED" | "PENDING" | "COMPLETED",
-        createdAt: new Date(a.created_at).toLocaleDateString("vi-VN"),
-        location: a.location,
-      }));
-    }
-    return appointments;
-  }, [serverAppointments, appointments, selectedAdvisor.id, selectedAdvisor.name]);
+  const currentAppointments = useMemo<BookingAppointment[]>(() => {
+    if (!activeSessionId || !serverAppointments) return [];
+    return serverAppointments.map((a) => ({
+      id: a.id,
+      advisorId: selectedAdvisor.id,
+      advisorName: selectedAdvisor.name,
+      subject: a.subject,
+      timeSlot: a.time_slot,
+      meetingType: a.meeting_type,
+      notes: a.notes || undefined,
+      status: a.status,
+      createdAt: new Date(a.created_at).toLocaleDateString("vi-VN"),
+      location: a.location,
+    }));
+  }, [activeSessionId, serverAppointments, selectedAdvisor.id, selectedAdvisor.name]);
 
-  const handleCancelAppointment = (id: string) => {
-    setAppointments((prev) => prev.filter((a) => a.id !== id));
-    toast.info("Đã hủy lịch hẹn tư vấn.");
+  const handleCancelAppointment = async (appointmentId: string) => {
+    if (!activeSessionId) return;
+    try {
+      await updateAppointmentStatusMutation.mutateAsync({
+        sessionId: activeSessionId,
+        appointmentId,
+        payload: { status: "CANCELLED" },
+      });
+      toast.info("Đã hủy lịch hẹn tư vấn.");
+    } catch (err) {
+      toast.error(
+        extractErrorMessage(
+          err,
+          "Không thể hủy lịch hẹn lúc này. Vui lòng thử lại.",
+        ),
+      );
+    }
   };
 
   // ==========================================
-  // Tab 3: Action Plan Tasks State
+  // Tab 3: Action Plan Tasks
   // ==========================================
+  const currentAdvisorTasks = useMemo<ActionPlanTask[]>(() => {
+    if (!activeSessionId || !serverTasks) return [];
+    return serverTasks.map((t) => ({
+      id: t.id,
+      advisorId: selectedAdvisor.id,
+      title: t.title,
+      description: t.description || undefined,
+      deadline: t.deadline,
+      priority: t.priority,
+      completed: t.completed,
+    }));
+  }, [activeSessionId, serverTasks, selectedAdvisor.id]);
 
-  const actionStorageKey = `aurora_advising_actionplan_${studentId}`;
-  const [actionTasks, setActionTasks] = useState<ActionPlanTask[]>(() => {
-    try {
-      const saved = localStorage.getItem(actionStorageKey);
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
-    return [
-      {
-        id: "task-1",
-        advisorId: "course-CO2007",
-        title: "Rà soát lại bài kiểm tra giữa kỳ CO2007",
-        description: "Xem lại câu 3 & câu 4 phần Pipeline Hazard và viết lại bài giải đúng vào vở.",
-        deadline: "Hạn chót: 20/11/2026",
-        priority: "HIGH",
-        completed: true,
-      },
-      {
-        id: "task-2",
-        advisorId: "course-CO2007",
-        title: "Gặp trợ giảng phụ đạo Lab 3 - Mô phỏng Logisim",
-        description: "Nhờ trợ giảng kiểm tra khối ALU và thanh ghi trước khi tiến hành chấm điểm giai đoạn 1.",
-        deadline: "Hạn chót: 22/11/2026",
-        priority: "HIGH",
-        completed: false,
-      },
-      {
-        id: "task-3",
-        advisorId: "course-CO2007",
-        title: "Hoàn thành bộ câu hỏi ôn tập chương Bộ nhớ Cache trên LMS",
-        description: "Đạt tối thiểu 80% điểm quiz trắc nghiệm để củng cố lý thuyết trước kỳ thi cuối kỳ.",
-        deadline: "Hạn chót: 28/11/2026",
-        priority: "MEDIUM",
-        completed: false,
-      },
-      {
-        id: "task-4",
-        advisorId: "course-CO2007",
-        title: "Nộp dự thảo Báo cáo Bài tập lớn (BTL) Tuần 11",
-        description: "Đóng gói mã nguồn MIPS và bản giải trình thiết kế nộp lên hệ thống trước 23:59 Chủ nhật.",
-        deadline: "Hạn chót: 30/11/2026",
-        priority: "HIGH",
-        completed: false,
-      },
-      {
-        id: "task-5",
-        advisorId: "advisor-faculty",
-        title: "Kiểm tra tiến độ tích lũy tín chỉ học phần tốt nghiệp",
-        description: "Rà soát các môn đại cương và chuyên ngành bắt buộc còn thiếu trên sổ tay đào tạo.",
-        deadline: "Hạn chót: 30/11/2026",
-        priority: "NORMAL",
-        completed: true,
-      },
-      {
-        id: "task-6",
-        advisorId: "course-CO2017",
-        title: "Hoàn thiện bài thực hành Lab xv6 Synchronization",
-        description: "Debug bài toán Producer-Consumer bằng Semaphore trong kernel xv6.",
-        deadline: "Hạn chót: 25/11/2026",
-        priority: "HIGH",
-        completed: false,
-      },
-    ];
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(actionStorageKey, JSON.stringify(actionTasks));
-    } catch {
-      // ignore
-    }
-  }, [actionTasks, actionStorageKey]);
-
-  // Filter tasks for selected advisor
-  const currentAdvisorTasks = useMemo(() => {
-    if (serverTasks && serverTasks.length > 0) {
-      return serverTasks.map((t) => ({
-        id: t.id,
-        advisorId: selectedAdvisor.id,
-        title: t.title,
-        description: t.description || undefined,
-        deadline: t.deadline,
-        priority: t.priority,
-        completed: t.completed,
-      }));
-    }
-    return actionTasks.filter((t) => t.advisorId === selectedAdvisor.id);
-  }, [serverTasks, actionTasks, selectedAdvisor.id]);
-
-  // New task input state
-  const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [newTaskPriority, setNewTaskPriority] = useState<"HIGH" | "MEDIUM" | "NORMAL">("HIGH");
-
-  const handleToggleTask = (taskId: string) => {
+  const handleToggleTask = async (taskId: string) => {
+    if (!activeSessionId) return;
     const task = currentAdvisorTasks.find((t) => t.id === taskId);
-    const nextCompleted = task ? !task.completed : true;
+    if (!task) return;
+    const nextCompleted = !task.completed;
 
-    setActionTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, completed: nextCompleted } : t)),
-    );
-
-    if (activeSessionId) {
-      toggleTaskMutation.mutate({
+    try {
+      await toggleTaskMutation.mutateAsync({
+        sessionId: activeSessionId,
         taskId,
         payload: { completed: nextCompleted },
       });
+    } catch (err) {
+      toast.error(
+        extractErrorMessage(
+          err,
+          "Không thể cập nhật trạng thái nhiệm vụ. Vui lòng thử lại.",
+        ),
+      );
     }
-  };
-
-  const handleAddTask = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTaskTitle.trim()) return;
-
-    const newTask: ActionPlanTask = {
-      id: `task-${Date.now()}`,
-      advisorId: selectedAdvisor.id,
-      title: newTaskTitle.trim(),
-      deadline: "Hạn chót: Cuối kỳ HK261",
-      priority: newTaskPriority,
-      completed: false,
-    };
-
-    setActionTasks((prev) => [newTask, ...prev]);
-    setNewTaskTitle("");
-    toast.success("Đã thêm nhiệm vụ cải thiện mới!");
-  };
-
-  const handleDeleteTask = (taskId: string) => {
-    setActionTasks((prev) => prev.filter((t) => t.id !== taskId));
   };
 
   const taskCompletionRate = useMemo(() => {
@@ -932,6 +659,10 @@ export const StudentAdvisingPage = () => {
   }, [currentAdvisorTasks]);
 
   const isLoading = isLoadingCourses || isLoadingPreds;
+  const isSending =
+    createOrGetSessionMutation.isPending || sendMessageMutation.isPending;
+  const isSubmittingBooking =
+    createOrGetSessionMutation.isPending || createAppointmentMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -948,7 +679,8 @@ export const StudentAdvisingPage = () => {
             </Badge>
           </div>
           <p className="mt-1 text-sm text-slate-600">
-            Kênh trao đổi trực tiếp với Cố vấn học tập khoa và Giảng viên phụ trách các môn học đang theo học kỳ này.
+            Kênh trao đổi trực tiếp với Giảng viên phụ trách các môn học đang
+            theo học kỳ này và Văn phòng Cố vấn học vụ khoa.
           </p>
         </div>
 
@@ -959,23 +691,26 @@ export const StudentAdvisingPage = () => {
             className="border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs"
           >
             <UserCheck className="mr-1.5 h-3.5 w-3.5 text-blue-600" />
-            <span>MSSV: {studentId}</span>
+            <span>MSSV: {studentId || "—"}</span>
           </Badge>
           <Badge
             variant="outline"
             className="border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs"
           >
             <GraduationCap className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
-            <span>GPA: {studentSummary?.cumulative_gpa?.toFixed(2) ?? "3.15"}/4.0</span>
+            <span>
+              GPA:{" "}
+              {studentSummary?.cumulative_gpa !== undefined
+                ? `${studentSummary.cumulative_gpa.toFixed(2)}/4.0`
+                : "—"}
+            </span>
           </Badge>
         </div>
       </div>
 
       {/* 2. Main Two-Column Layout (1/3 Left, 2/3 Right) */}
       <div className="grid grid-cols-12 gap-6">
-        {/* ======================================================== */}
-        {/* LEFT COLUMN: Advisors & Lecturers Directory (4/12 cols)  */}
-        {/* ======================================================== */}
+        {/* LEFT COLUMN: Advisors & Lecturers Directory (4/12 cols) */}
         <div className="col-span-12 space-y-4 lg:col-span-4">
           <Card className="border-slate-200 bg-white shadow-xs">
             <CardHeader className="p-4 pb-3">
@@ -985,11 +720,14 @@ export const StudentAdvisingPage = () => {
                     Danh bạ Thầy / Cô
                   </CardTitle>
                   <CardDescription className="text-xs text-slate-500">
-                    Giảng viên môn học & Cố vấn phụ trách
+                    Giảng viên môn học & Văn phòng Cố vấn
                   </CardDescription>
                 </div>
-                <Badge variant="secondary" className="text-[11px] font-semibold text-slate-600">
-                  {advisors.length} Thầy Cô
+                <Badge
+                  variant="secondary"
+                  className="text-[11px] font-semibold text-slate-600"
+                >
+                  {advisors.length} Mục
                 </Badge>
               </div>
 
@@ -1008,10 +746,12 @@ export const StudentAdvisingPage = () => {
 
             <CardContent className="space-y-2 p-3 pt-0 max-h-160 overflow-y-auto">
               {isLoading ? (
-                // Skeletons
                 <div className="space-y-2.5 py-2">
                   {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-center gap-3 rounded-lg border border-slate-100 p-3">
+                    <div
+                      key={i}
+                      className="flex items-center gap-3 rounded-lg border border-slate-100 p-3"
+                    >
                       <Skeleton className="h-10 w-10 rounded-full" />
                       <div className="flex-1 space-y-1.5">
                         <Skeleton className="h-4 w-3/4" />
@@ -1022,12 +762,19 @@ export const StudentAdvisingPage = () => {
                 </div>
               ) : filteredAdvisors.length === 0 ? (
                 <div className="py-8 text-center">
-                  <p className="text-xs text-slate-500">Không tìm thấy giảng viên phù hợp.</p>
+                  <p className="text-xs text-slate-500">
+                    Không tìm thấy giảng viên phù hợp.
+                  </p>
                 </div>
               ) : (
                 filteredAdvisors.map((advisor) => {
                   const isSelected = selectedAdvisor.id === advisor.id;
-                  const isRisk = advisor.riskLevel === "HIGH" || advisor.riskLevel === "MEDIUM";
+                  const isRisk =
+                    advisor.riskLevel === "HIGH" ||
+                    advisor.riskLevel === "MEDIUM";
+                  const unreadCount = advisor.courseCode
+                    ? (unreadByCourse.get(advisor.courseCode) ?? 0)
+                    : 0;
 
                   return (
                     <div
@@ -1050,18 +797,20 @@ export const StudentAdvisingPage = () => {
                     >
                       {/* Top Row: Avatar & Basic Info */}
                       <div className="flex items-start gap-3">
-                        <Avatar className={cn(
-                          "h-10 w-10 ring-1",
-                          advisor.isFacultyAdvisor
-                            ? "border-blue-200 ring-blue-400/30"
-                            : "border-slate-200 ring-slate-300"
-                        )}>
+                        <Avatar
+                          className={cn(
+                            "h-10 w-10 ring-1",
+                            advisor.isFacultyAdvisor
+                              ? "border-blue-200 ring-blue-400/30"
+                              : "border-slate-200 ring-slate-300",
+                          )}
+                        >
                           <AvatarFallback
                             className={cn(
                               "text-xs font-bold",
                               advisor.isFacultyAdvisor
                                 ? "bg-blue-600 text-white"
-                                : "bg-slate-800 text-white"
+                                : "bg-slate-800 text-white",
                             )}
                           >
                             {getInitials(advisor.name)}
@@ -1073,21 +822,31 @@ export const StudentAdvisingPage = () => {
                             <span className="truncate text-xs font-bold text-slate-900 group-hover:text-blue-600">
                               {advisor.name}
                             </span>
-                            {advisor.isFacultyAdvisor ? (
-                              <Badge className="bg-blue-100 text-[10px] font-semibold text-blue-700 hover:bg-blue-100 shrink-0">
-                                Cố vấn Ngành
-                              </Badge>
-                            ) : (
-                              advisor.courseCode && (
-                                <Badge variant="outline" className="font-mono text-[10px] font-bold text-slate-700 border-slate-200 shrink-0">
-                                  {advisor.courseCode}
+                            <div className="flex items-center gap-1 shrink-0">
+                              {unreadCount > 0 && (
+                                <Badge className="bg-rose-600 px-1.5 py-0 text-[10px] font-bold text-white">
+                                  {unreadCount} mới
                                 </Badge>
-                              )
-                            )}
+                              )}
+                              {advisor.isFacultyAdvisor ? (
+                                <Badge className="bg-blue-100 text-[10px] font-semibold text-blue-700 hover:bg-blue-100">
+                                  Văn phòng Khoa
+                                </Badge>
+                              ) : (
+                                advisor.courseCode && (
+                                  <Badge
+                                    variant="outline"
+                                    className="font-mono text-[10px] font-bold text-slate-700 border-slate-200"
+                                  >
+                                    {advisor.courseCode}
+                                  </Badge>
+                                )
+                              )}
+                            </div>
                           </div>
 
                           <p className="mt-0.5 truncate text-[11px] text-slate-600 font-medium">
-                            {advisor.courseName ? `${advisor.courseName}` : advisor.department}
+                            {advisor.courseName || advisor.department}
                           </p>
                         </div>
                       </div>
@@ -1096,7 +855,9 @@ export const StudentAdvisingPage = () => {
                       <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px] text-slate-500">
                         <span className="flex items-center gap-1 truncate">
                           <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
-                          <span className="truncate">{advisor.office.split(",")[0]}</span>
+                          <span className="truncate">
+                            {advisor.office.split(",")[0]}
+                          </span>
                         </span>
 
                         {isRisk && (
@@ -1104,20 +865,24 @@ export const StudentAdvisingPage = () => {
                             className={cn(
                               "text-[10px] font-semibold shrink-0 gap-1",
                               advisor.riskLevel === "HIGH"
-                                ? "bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200"
-                                : "bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-200"
+                                ? "bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200"
+                                : "bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-200",
                             )}
                           >
                             <Info className="h-2.5 w-2.5" />
-                            {advisor.riskLevel === "HIGH" ? "Cần hỗ trợ" : "Cần theo dõi"}
+                            {advisor.riskLevel === "HIGH"
+                              ? "Cần hỗ trợ"
+                              : "Cần theo dõi"}
                           </Badge>
                         )}
-                        {!isRisk && !advisor.isFacultyAdvisor && (
-                          <Badge className="bg-emerald-100 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 shrink-0 gap-1">
-                            <ShieldCheck className="h-2.5 w-2.5" />
-                            An toàn
-                          </Badge>
-                        )}
+                        {!isRisk &&
+                          !advisor.isFacultyAdvisor &&
+                          advisor.riskLevel === "LOW" && (
+                            <Badge className="bg-emerald-100 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 shrink-0 gap-1">
+                              <ShieldCheck className="h-2.5 w-2.5" />
+                              An toàn
+                            </Badge>
+                          )}
                       </div>
                     </div>
                   );
@@ -1131,18 +896,20 @@ export const StudentAdvisingPage = () => {
             <div className="flex items-start gap-2.5">
               <Info className="mt-0.5 h-4 w-4 text-blue-600 shrink-0" />
               <div className="space-y-1">
-                <h4 className="text-xs font-bold text-blue-900">Hướng dẫn Tư vấn Học vụ</h4>
+                <h4 className="text-xs font-bold text-blue-900">
+                  Hướng dẫn Tư vấn Học vụ
+                </h4>
                 <p className="text-[11px] leading-relaxed text-blue-800/80">
-                  Chọn Thầy/Cô ở danh bạ để xem thông báo riêng, đặt lịch tiếp sinh viên (Office Hours) hoặc theo dõi danh sách việc cần làm để cải thiện kết quả môn học.
+                  Chọn Giảng viên phụ trách môn học ở danh bạ để trao đổi trực
+                  tiếp, đặt lịch tiếp sinh viên (Office Hours) hoặc theo dõi
+                  nhiệm vụ cải thiện được giao.
                 </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ======================================================== */}
-        {/* RIGHT COLUMN: Interactive Workspace (8/12 cols)          */}
-        {/* ======================================================== */}
+        {/* RIGHT COLUMN: Interactive Workspace (8/12 cols) */}
         <div className="col-span-12 space-y-5 lg:col-span-8">
           {/* Active Advisor Profile Header Card */}
           <Card className="border-slate-200 bg-white shadow-xs">
@@ -1162,17 +929,25 @@ export const StudentAdvisingPage = () => {
                       </h2>
                       {selectedAdvisor.isFacultyAdvisor ? (
                         <Badge className="bg-blue-600 text-xs font-semibold text-white">
-                          Cố vấn Trưởng ngành
+                          Văn phòng Khoa
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700">
-                          {selectedAdvisor.courseCode} • {selectedAdvisor.credits} Tín chỉ
+                        <Badge
+                          variant="outline"
+                          className="border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700"
+                        >
+                          {selectedAdvisor.courseCode} •{" "}
+                          {selectedAdvisor.credits} Tín chỉ
                         </Badge>
                       )}
                       {selectedAdvisor.riskLevel === "HIGH" && (
-                        <Badge className="bg-blue-50 text-blue-700 text-xs font-semibold border-blue-200">
-                          <Info className="mr-1 h-3 w-3 text-blue-600" />
-                          Đề xuất tư vấn môn học (Dự báo rủi ro {Math.round((selectedAdvisor.failProbability ?? 0.42) * 100)}%)
+                        <Badge className="bg-rose-50 text-rose-700 text-xs font-semibold border-rose-200">
+                          <Info className="mr-1 h-3 w-3 text-rose-600" />
+                          Đề xuất tư vấn môn học (Dự báo rủi ro{" "}
+                          {Math.round(
+                            (selectedAdvisor.failProbability ?? 0) * 100,
+                          )}
+                          %)
                         </Badge>
                       )}
                     </div>
@@ -1185,11 +960,16 @@ export const StudentAdvisingPage = () => {
                     <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600">
                       <span className="flex items-center gap-1.5">
                         <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                        <span className="font-medium text-slate-800">{selectedAdvisor.office}</span>
+                        <span className="font-medium text-slate-800">
+                          {selectedAdvisor.office}
+                        </span>
                       </span>
                       <span className="flex items-center gap-1.5">
                         <Mail className="h-3.5 w-3.5 text-slate-400" />
-                        <a href={`mailto:${selectedAdvisor.email}`} className="text-blue-600 hover:underline">
+                        <a
+                          href={`mailto:${selectedAdvisor.email}`}
+                          className="text-blue-600 hover:underline"
+                        >
                           {selectedAdvisor.email}
                         </a>
                       </span>
@@ -1205,32 +985,49 @@ export const StudentAdvisingPage = () => {
                   </div>
                 </div>
 
-                <Button
-                  size="sm"
-                  onClick={() => handleTabChange("booking")}
-                  className="bg-blue-600 text-xs font-semibold text-white hover:bg-blue-700 cursor-pointer shadow-2xs shrink-0"
-                >
-                  <Calendar className="mr-1.5 h-3.5 w-3.5" />
-                  Đặt lịch gặp Thầy/Cô
-                </Button>
+                {canCreateSession ? (
+                  <Button
+                    size="sm"
+                    onClick={() => handleTabChange("booking")}
+                    className="bg-blue-600 text-xs font-semibold text-white hover:bg-blue-700 cursor-pointer shadow-2xs shrink-0"
+                  >
+                    <Calendar className="mr-1.5 h-3.5 w-3.5" />
+                    Đặt lịch gặp Thầy/Cô
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      window.open(`mailto:${selectedAdvisor.email}`, "_self");
+                    }}
+                    className="text-xs font-semibold cursor-pointer shrink-0"
+                  >
+                    <Mail className="mr-1.5 h-3.5 w-3.5" />
+                    Gửi Email Văn phòng
+                  </Button>
+                )}
               </div>
 
               {/* 3 Navigation Tabs */}
-              <div className="mt-5 flex border-b border-slate-200">
+              <div className="mt-5 flex border-b border-slate-200 overflow-x-auto">
                 <button
                   type="button"
                   onClick={() => handleTabChange("feed")}
                   className={cn(
-                    "flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer",
+                    "flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer shrink-0",
                     activeTab === "feed"
                       ? "border-blue-600 text-blue-600 bg-blue-50/30"
                       : "border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900",
                   )}
                 >
                   <MessageSquare className="h-4 w-4" />
-                  <span>Lời dặn & Hộp thư Trao đổi</span>
-                  <Badge variant="secondary" className="text-[10px] font-semibold ml-1">
-                    {currentAdvisorFeeds.length}
+                  <span>Hộp thư Trao đổi</span>
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] font-semibold ml-1"
+                  >
+                    {currentAdvisorMessages.length}
                   </Badge>
                 </button>
 
@@ -1238,29 +1035,38 @@ export const StudentAdvisingPage = () => {
                   type="button"
                   onClick={() => handleTabChange("booking")}
                   className={cn(
-                    "flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer",
+                    "flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer shrink-0",
                     activeTab === "booking"
                       ? "border-blue-600 text-blue-600 bg-blue-50/30"
                       : "border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900",
                   )}
                 >
                   <CalendarCheck className="h-4 w-4" />
-                  <span>Đặt lịch hẹn tiếp sinh viên (Office Hours)</span>
+                  <span>Đặt lịch Office Hours</span>
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] font-semibold ml-1"
+                  >
+                    {currentAppointments.length}
+                  </Badge>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleTabChange("action-plan")}
                   className={cn(
-                    "flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer",
+                    "flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer shrink-0",
                     activeTab === "action-plan"
                       ? "border-blue-600 text-blue-600 bg-blue-50/30"
                       : "border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900",
                   )}
                 >
                   <ListTodo className="h-4 w-4" />
-                  <span>Kế hoạch Hành động Cải thiện</span>
-                  <Badge variant="secondary" className="text-[10px] font-semibold ml-1">
+                  <span>Kế hoạch Hành động</span>
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] font-semibold ml-1"
+                  >
                     {currentAdvisorTasks.filter((t) => !t.completed).length} việc
                   </Badge>
                 </button>
@@ -1268,66 +1074,67 @@ export const StudentAdvisingPage = () => {
             </CardContent>
           </Card>
 
-          {/* ======================================================== */}
-          {/* TAB 1: Lời dặn & Lịch sử trao đổi (Feed + Direct Chat)  */}
-          {/* ======================================================== */}
-          {activeTab === "feed" && (
+          {/* Informational Banner for Faculty Office (no course session) */}
+          {!canCreateSession && (
+            <Card className="border-blue-200 bg-blue-50/40 shadow-xs">
+              <CardContent className="p-5">
+                <div className="flex items-start gap-3">
+                  <Info className="mt-0.5 h-5 w-5 text-blue-600 shrink-0" />
+                  <div className="space-y-1.5">
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Thông tin Liên hệ Văn phòng Cố vấn Học vụ Khoa
+                    </h3>
+                    <p className="text-xs leading-relaxed text-slate-700">
+                      Các phiên trao đổi trực tuyến, đặt lịch hẹn và giao nhiệm
+                      vụ trong hệ thống được gắn trực tiếp với từng học phần bạn
+                      đang đăng ký học trong kỳ{" "}
+                      <strong>{activeSemesterLabel}</strong>. Để được hỗ trợ các
+                      vấn đề học vụ chung (bảo lưu, cảnh cáo học vụ, xét tốt
+                      nghiệp), vui lòng liên hệ trực tiếp tại{" "}
+                      <strong>{selectedAdvisor.office}</strong> trong khung giờ{" "}
+                      <strong>{selectedAdvisor.officeHours}</strong> hoặc qua
+                      email{" "}
+                      <a
+                        href={`mailto:${selectedAdvisor.email}`}
+                        className="font-semibold text-blue-700 underline"
+                      >
+                        {selectedAdvisor.email}
+                      </a>
+                      .
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* TAB 1: Hộp thư Trao đổi Trực tiếp */}
+          {canCreateSession && activeTab === "feed" && (
             <div className="space-y-5">
-              {/* Guidance Feed from Advisor */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                    <Sparkles className="h-4 w-4 text-blue-600" />
-                    Lời dặn & Thông báo Định hướng từ {selectedAdvisor.name}
-                  </h3>
-                  <span className="text-xs text-slate-500">Cập nhật theo tiến độ học kỳ</span>
-                </div>
-
-                <div className="space-y-3">
-                  {currentAdvisorFeeds.map((feed) => (
-                    <Card
-                      key={feed.id}
-                      className={cn(
-                        "border bg-white shadow-xs transition-colors",
-                        feed.tagColor === "blue" && "border-blue-200 bg-blue-50/20",
-                        feed.tagColor === "sky" && "border-sky-200 bg-sky-50/20",
-                        feed.tagColor === "amber" && "border-amber-200 bg-amber-50/20",
-                        feed.tagColor === "purple" && "border-purple-200 bg-purple-50/20",
-                        feed.tagColor === "emerald" && "border-emerald-200 bg-emerald-50/20",
-                      )}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <Badge
-                                className={cn(
-                                  "text-[10px] font-semibold",
-                                  feed.tagColor === "blue" && "bg-blue-100 text-blue-700 hover:bg-blue-100",
-                                  feed.tagColor === "sky" && "bg-sky-100 text-sky-800 hover:bg-sky-100",
-                                  feed.tagColor === "amber" && "bg-amber-100 text-amber-800 hover:bg-amber-100",
-                                  feed.tagColor === "purple" && "bg-purple-100 text-purple-700 hover:bg-purple-100",
-                                  feed.tagColor === "emerald" && "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
-                                )}
-                              >
-                                {feed.tag}
-                              </Badge>
-                              <h4 className="text-xs font-bold text-slate-900">{feed.title}</h4>
-                            </div>
-                            <p className="text-xs leading-relaxed text-slate-700 pt-1">
-                              {feed.content}
-                            </p>
-                          </div>
-
-                          <span className="text-[11px] font-medium text-slate-400 shrink-0">
-                            {feed.timestamp}
-                          </span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
+              {/* Course Office Hours Notice */}
+              <Card className="border-blue-200 bg-blue-50/20 shadow-xs">
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-blue-100 text-[10px] font-semibold text-blue-700 hover:bg-blue-100">
+                          Office Hours
+                        </Badge>
+                        <h4 className="text-xs font-bold text-slate-900">
+                          Lịch tiếp sinh viên môn {selectedAdvisor.courseCode}
+                        </h4>
+                      </div>
+                      <p className="text-xs leading-relaxed text-slate-700 pt-1">
+                        {selectedAdvisor.name} tiếp sinh viên tại{" "}
+                        <strong>{selectedAdvisor.office}</strong> vào khung giờ{" "}
+                        <strong>{selectedAdvisor.officeHours}</strong>. Sinh
+                        viên có câu hỏi chuyên môn hoặc cần trao đổi điểm số vui
+                        lòng nhắn tin trực tiếp bên dưới hoặc đặt lịch hẹn.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* Quick Requests Bar */}
               <Card className="border-slate-200 bg-slate-50/70 shadow-2xs">
@@ -1339,7 +1146,7 @@ export const StudentAdvisingPage = () => {
                     </CardTitle>
                   </div>
                   <CardDescription className="text-[11px] text-slate-500">
-                    Bấm để gửi yêu cầu mẫu hoặc câu hỏi nhanh tới Thầy/Cô mà không cần soạn thảo:
+                    Bấm để gửi yêu cầu mẫu trực tiếp tới {selectedAdvisor.name}:
                   </CardDescription>
                 </CardHeader>
 
@@ -1348,6 +1155,7 @@ export const StudentAdvisingPage = () => {
                     <Button
                       variant="outline"
                       size="sm"
+                      disabled={isSending}
                       onClick={() => handleQuickRequest("materials")}
                       className="cursor-pointer bg-white text-xs font-medium text-slate-700 hover:border-blue-400 hover:text-blue-700 shadow-2xs gap-1.5 h-8"
                     >
@@ -1358,6 +1166,7 @@ export const StudentAdvisingPage = () => {
                     <Button
                       variant="outline"
                       size="sm"
+                      disabled={isSending}
                       onClick={() => handleQuickRequest("midterm_review")}
                       className="cursor-pointer bg-white text-xs font-medium text-slate-700 hover:border-blue-400 hover:text-blue-700 shadow-2xs gap-1.5 h-8"
                     >
@@ -1368,6 +1177,7 @@ export const StudentAdvisingPage = () => {
                     <Button
                       variant="outline"
                       size="sm"
+                      disabled={isSending}
                       onClick={() => handleQuickRequest("study_group")}
                       className="cursor-pointer bg-white text-xs font-medium text-slate-700 hover:border-blue-400 hover:text-blue-700 shadow-2xs gap-1.5 h-8"
                     >
@@ -1388,23 +1198,47 @@ export const StudentAdvisingPage = () => {
                         Hộp thư Trao đổi Trực tiếp
                       </CardTitle>
                     </div>
-                    <span className="text-[11px] text-slate-400">
-                      Đối thoại với {selectedAdvisor.name}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {activeSessionId && (activeSession?.unread_count ?? 0) > 0 && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={markSessionReadMutation.isPending}
+                          onClick={() => markSessionReadMutation.mutate(activeSessionId)}
+                          className="h-7 border-blue-200 bg-blue-50 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 cursor-pointer gap-1"
+                        >
+                          <CheckCheck className="h-3.5 w-3.5" />
+                          <span>
+                            Đánh dấu đã đọc ({activeSession?.unread_count} mới)
+                          </span>
+                        </Button>
+                      )}
+                      <span className="text-[11px] text-slate-400">
+                        Đối thoại với {selectedAdvisor.name}
+                      </span>
+                    </div>
                   </div>
                 </CardHeader>
 
                 <CardContent className="p-4 space-y-4">
                   {/* Messages Feed */}
                   <div className="space-y-3 min-h-48 max-h-96 overflow-y-auto pr-1">
-                    {currentAdvisorMessages.length === 0 ? (
+                    {isLoadingMessages ? (
+                      <div className="space-y-3 py-2">
+                        <Skeleton className="h-12 w-3/4 rounded-xl" />
+                        <Skeleton className="ml-auto h-12 w-2/3 rounded-xl" />
+                      </div>
+                    ) : currentAdvisorMessages.length === 0 ? (
                       <div className="py-8 text-center">
                         <MessageSquare className="mx-auto h-8 w-8 text-slate-300 mb-2" />
                         <p className="text-xs text-slate-500 font-medium">
-                          Chưa có tin nhắn nào với Thầy/Cô.
+                          Chưa có tin nhắn nào cho môn{" "}
+                          {selectedAdvisor.courseCode}.
                         </p>
                         <p className="text-[11px] text-slate-400 mt-1">
-                          Em có thể chọn một Yêu cầu Nhanh ở trên hoặc nhập câu hỏi bên dưới.
+                          Em có thể chọn một Yêu cầu Nhanh ở trên hoặc nhập câu
+                          hỏi bên dưới để bắt đầu phiên cố vấn.
                         </p>
                       </div>
                     ) : (
@@ -1416,7 +1250,9 @@ export const StudentAdvisingPage = () => {
                             key={msg.id}
                             className={cn(
                               "flex gap-2.5 max-w-[85%]",
-                              isStudent ? "ml-auto flex-row-reverse" : "mr-auto",
+                              isStudent
+                                ? "ml-auto flex-row-reverse"
+                                : "mr-auto",
                             )}
                           >
                             <Avatar className="h-7 w-7 mt-0.5 shrink-0">
@@ -1439,13 +1275,9 @@ export const StudentAdvisingPage = () => {
                                     : "bg-slate-100 text-slate-900 rounded-tl-xs",
                                 )}
                               >
-                                {msg.isQuickRequest && (
-                                  <div className="mb-1 text-[10px] font-semibold text-blue-100 flex items-center gap-1">
-                                    <Sparkles className="h-2.5 w-2.5" />
-                                    <span>Yêu cầu nhanh</span>
-                                  </div>
-                                )}
-                                <p className="whitespace-pre-wrap">{msg.content}</p>
+                                <p className="whitespace-pre-wrap">
+                                  {msg.content}
+                                </p>
                               </div>
                               <div
                                 className={cn(
@@ -1454,6 +1286,18 @@ export const StudentAdvisingPage = () => {
                                 )}
                               >
                                 {msg.senderName} • {msg.timestamp}
+                                {isStudent && (
+                                  <span
+                                    className={cn(
+                                      "ml-1.5 font-medium",
+                                      msg.isRead
+                                        ? "text-emerald-600"
+                                        : "text-slate-400",
+                                    )}
+                                  >
+                                    • {msg.isRead ? "GV đã xem" : "Đã gửi"}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1466,7 +1310,7 @@ export const StudentAdvisingPage = () => {
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
-                      handleSendMessage();
+                      void handleSendMessage();
                     }}
                     className="flex items-center gap-2 pt-2 border-t border-slate-100"
                   >
@@ -1475,15 +1319,16 @@ export const StudentAdvisingPage = () => {
                       placeholder={`Nhập tin nhắn / câu hỏi gửi tới ${selectedAdvisor.name}...`}
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
+                      disabled={isSending}
                       className="h-10 text-xs border-slate-200 focus-visible:ring-blue-500"
                     />
                     <Button
                       type="submit"
-                      disabled={!chatInput.trim()}
+                      disabled={!chatInput.trim() || isSending}
                       className="h-10 bg-blue-600 px-4 text-xs font-semibold text-white hover:bg-blue-700 cursor-pointer shadow-2xs shrink-0"
                     >
                       <Send className="mr-1.5 h-3.5 w-3.5" />
-                      Gửi tin
+                      {isSending ? "Đang gửi..." : "Gửi tin"}
                     </Button>
                   </form>
                 </CardContent>
@@ -1491,12 +1336,9 @@ export const StudentAdvisingPage = () => {
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* TAB 2: Đặt lịch hẹn tiếp sinh viên (Office Hours Booking) */}
-          {/* ======================================================== */}
-          {activeTab === "booking" && (
+          {/* TAB 2: Office Hours Booking */}
+          {canCreateSession && activeTab === "booking" && (
             <div className="space-y-5">
-              {/* Booking Form Card */}
               <Card className="border-slate-200 bg-white shadow-xs">
                 <CardHeader className="p-5 pb-3">
                   <div className="flex items-center gap-2">
@@ -1506,7 +1348,8 @@ export const StudentAdvisingPage = () => {
                     </CardTitle>
                   </div>
                   <CardDescription className="text-xs text-slate-500">
-                    Đặt lịch tư vấn học vụ hoặc giải đáp chuyên môn trực tiếp với {selectedAdvisor.name}.
+                    Đặt lịch tư vấn học vụ hoặc giải đáp chuyên môn trực tiếp
+                    với {selectedAdvisor.name} ({selectedAdvisor.courseCode}).
                   </CardDescription>
                 </CardHeader>
 
@@ -1515,14 +1358,31 @@ export const StudentAdvisingPage = () => {
                     {/* Reason Selector */}
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-700">
-                        1. Mục đích hẹn gặp <span className="text-blue-600">*</span>
+                        1. Mục đích hẹn gặp{" "}
+                        <span className="text-blue-600">*</span>
                       </label>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {[
-                          { id: "r1", label: "Hỏi bài chưa hiểu / giải đáp chuyên môn", icon: BookOpen },
-                          { id: "r2", label: "Xin hướng dẫn bài tập lớn / đồ án", icon: Sparkles },
-                          { id: "r3", label: "Tư vấn phương án gỡ điểm rớt môn", icon: TrendingDown },
-                          { id: "r4", label: "Tư vấn lộ trình & đăng ký môn kỳ sau", icon: GraduationCap },
+                          {
+                            id: "r1",
+                            label: "Hỏi bài chưa hiểu / giải đáp chuyên môn",
+                            icon: BookOpen,
+                          },
+                          {
+                            id: "r2",
+                            label: "Xin hướng dẫn bài tập lớn / đồ án",
+                            icon: Sparkles,
+                          },
+                          {
+                            id: "r3",
+                            label: "Tư vấn phương án gỡ điểm rớt môn",
+                            icon: TrendingDown,
+                          },
+                          {
+                            id: "r4",
+                            label: "Tư vấn lộ trình & đăng ký môn kỳ sau",
+                            icon: GraduationCap,
+                          },
                         ].map((item) => (
                           <div
                             key={item.id}
@@ -1552,7 +1412,8 @@ export const StudentAdvisingPage = () => {
                     {/* Time Slot Selector */}
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-700">
-                        2. Chọn Khung giờ tiếp sinh viên (Office Hours khả dụng) <span className="text-blue-600">*</span>
+                        2. Chọn Khung giờ tiếp sinh viên{" "}
+                        <span className="text-blue-600">*</span>
                       </label>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {selectedAdvisor.availableSlots.map((slot) => (
@@ -1598,7 +1459,9 @@ export const StudentAdvisingPage = () => {
                           )}
                         >
                           <Building2 className="h-4 w-4 text-slate-500" />
-                          <span>Gặp trực tiếp tại Văn phòng ({selectedAdvisor.office.split(",")[0]})</span>
+                          <span>
+                            Gặp trực tiếp ({selectedAdvisor.office.split(",")[0]})
+                          </span>
                         </button>
 
                         <button
@@ -1620,11 +1483,11 @@ export const StudentAdvisingPage = () => {
                     {/* Notes & Pre-work Input */}
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-700">
-                        4. Nội dung cần chuẩn bị trước / Ghi chú cho Thầy Cô (Tùy chọn)
+                        4. Nội dung cần chuẩn bị trước / Ghi chú (Tùy chọn)
                       </label>
                       <textarea
                         rows={3}
-                        placeholder="Ví dụ: Em muốn hỏi về phần bài tập 4 chương Pipeline và xin định hướng cách làm bài tập lớn..."
+                        placeholder="Ví dụ: Em muốn hỏi về phần bài tập chương 4 và xin định hướng làm bài tập lớn..."
                         value={bookingNotes}
                         onChange={(e) => setBookingNotes(e.target.value)}
                         className="w-full rounded-md border border-slate-200 bg-white p-2.5 text-xs text-slate-800 focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
@@ -1635,10 +1498,13 @@ export const StudentAdvisingPage = () => {
                     <div className="flex justify-end pt-2">
                       <Button
                         type="submit"
+                        disabled={isSubmittingBooking}
                         className="bg-blue-600 text-xs font-semibold text-white hover:bg-blue-700 cursor-pointer shadow-2xs px-5 h-9"
                       >
                         <Calendar className="mr-1.5 h-3.5 w-3.5" />
-                        Gửi Phiếu Hẹn Tư Vấn
+                        {isSubmittingBooking
+                          ? "Đang gửi phiếu hẹn..."
+                          : "Gửi Phiếu Hẹn Tư Vấn"}
                       </Button>
                     </div>
                   </form>
@@ -1652,32 +1518,60 @@ export const StudentAdvisingPage = () => {
                   Lịch Hẹn Đã Đăng Ký ({currentAppointments.length})
                 </h3>
 
-                {currentAppointments.length === 0 ? (
+                {isLoadingAppointments ? (
+                  <div className="space-y-2.5">
+                    <Skeleton className="h-20 w-full rounded-xl" />
+                  </div>
+                ) : currentAppointments.length === 0 ? (
                   <Card className="border-slate-200 bg-white p-6 text-center shadow-xs">
-                    <p className="text-xs text-slate-500">Chưa có phiếu hẹn nào được đăng ký.</p>
+                    <p className="text-xs text-slate-500">
+                      Chưa có phiếu hẹn nào cho môn {selectedAdvisor.courseCode}.
+                    </p>
                   </Card>
                 ) : (
                   <div className="space-y-2.5">
                     {currentAppointments.map((apt) => (
-                      <Card key={apt.id} className="border-slate-200 bg-white shadow-xs">
+                      <Card
+                        key={apt.id}
+                        className="border-slate-200 bg-white shadow-xs"
+                      >
                         <CardContent className="p-4">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-slate-900">{apt.subject}</span>
-                                {apt.status === "CONFIRMED" ? (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs font-bold text-slate-900">
+                                  {apt.subject}
+                                </span>
+                                {apt.status === "CONFIRMED" && (
                                   <Badge className="bg-emerald-100 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 border-emerald-200">
-                                    <CheckCircle2 className="mr-1 h-3 w-3" /> Đã xác nhận
+                                    <CheckCircle2 className="mr-1 h-3 w-3" /> Đã
+                                    xác nhận
                                   </Badge>
-                                ) : (
+                                )}
+                                {apt.status === "PENDING" && (
                                   <Badge className="bg-amber-100 text-[10px] font-semibold text-amber-800 hover:bg-amber-100 border-amber-200">
-                                    <Clock className="mr-1 h-3 w-3" /> Đang chờ duyệt
+                                    <Clock className="mr-1 h-3 w-3" /> Đang chờ
+                                    duyệt
+                                  </Badge>
+                                )}
+                                {apt.status === "COMPLETED" && (
+                                  <Badge className="bg-blue-100 text-[10px] font-semibold text-blue-700 hover:bg-blue-100 border-blue-200">
+                                    <CheckCircle2 className="mr-1 h-3 w-3" /> Đã
+                                    hoàn thành
+                                  </Badge>
+                                )}
+                                {apt.status === "CANCELLED" && (
+                                  <Badge className="bg-slate-100 text-[10px] font-semibold text-slate-600 hover:bg-slate-100 border-slate-200">
+                                    <XCircle className="mr-1 h-3 w-3" /> Đã hủy
                                   </Badge>
                                 )}
                               </div>
 
                               <p className="text-xs font-medium text-slate-600">
-                                Với Thầy/Cô: <span className="font-semibold text-slate-900">{apt.advisorName}</span>
+                                Với Thầy/Cô:{" "}
+                                <span className="font-semibold text-slate-900">
+                                  {apt.advisorName}
+                                </span>
                               </p>
 
                               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-[11px] text-slate-500">
@@ -1696,14 +1590,22 @@ export const StudentAdvisingPage = () => {
                               )}
                             </div>
 
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleCancelAppointment(apt.id)}
-                              className="text-xs text-slate-400 hover:text-rose-600 cursor-pointer self-start sm:self-center"
-                            >
-                              Hủy lịch
-                            </Button>
+                            {(apt.status === "PENDING" ||
+                              apt.status === "CONFIRMED") && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={
+                                  updateAppointmentStatusMutation.isPending
+                                }
+                                onClick={() =>
+                                  void handleCancelAppointment(apt.id)
+                                }
+                                className="text-xs text-slate-400 hover:text-rose-600 cursor-pointer self-start sm:self-center"
+                              >
+                                Hủy lịch
+                              </Button>
+                            )}
                           </div>
                         </CardContent>
                       </Card>
@@ -1714,10 +1616,8 @@ export const StudentAdvisingPage = () => {
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* TAB 3: Kế hoạch Hành động Cải thiện (Action Plan)         */}
-          {/* ======================================================== */}
-          {activeTab === "action-plan" && (
+          {/* TAB 3: Action Plan Tasks */}
+          {canCreateSession && activeTab === "action-plan" && (
             <div className="space-y-5">
               {/* Progress Summary Card */}
               <Card className="border-slate-200 bg-white shadow-xs">
@@ -1727,11 +1627,13 @@ export const StudentAdvisingPage = () => {
                       <div className="flex items-center gap-2">
                         <ListTodo className="h-5 w-5 text-blue-600" />
                         <h3 className="text-sm font-bold text-slate-900">
-                          Tiến độ Kế hoạch Cải thiện — {selectedAdvisor.courseCode ? selectedAdvisor.courseCode : "Định hướng Học vụ"}
+                          Tiến độ Kế hoạch Cải thiện —{" "}
+                          {selectedAdvisor.courseCode}
                         </h3>
                       </div>
                       <p className="mt-1 text-xs text-slate-600">
-                        Checklist các đầu việc do Cố vấn & Giảng viên gợi ý để bù đắp kiến thức và tối ưu hóa kết quả thi.
+                        Checklist các đầu việc do Giảng viên phụ trách giao để
+                        bù đắp kiến thức và cải thiện kết quả môn học.
                       </p>
                     </div>
 
@@ -1739,12 +1641,17 @@ export const StudentAdvisingPage = () => {
                       <span className="text-xl font-extrabold text-slate-900">
                         {taskCompletionRate}%
                       </span>
-                      <span className="text-xs text-slate-500 ml-1">Hoàn thành</span>
+                      <span className="text-xs text-slate-500 ml-1">
+                        Hoàn thành
+                      </span>
                     </div>
                   </div>
 
                   <div className="mt-4">
-                    <Progress value={taskCompletionRate} className="h-2 bg-slate-100" />
+                    <Progress
+                      value={taskCompletionRate}
+                      className="h-2 bg-slate-100"
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -1753,21 +1660,28 @@ export const StudentAdvisingPage = () => {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-slate-900">
-                    Danh sách Nhiệm vụ Cần làm ({currentAdvisorTasks.length})
+                    Danh sách Nhiệm vụ Được giao ({currentAdvisorTasks.length})
                   </h4>
                   <span className="text-[11px] text-slate-500">
-                    Tích chọn để đánh dấu hoàn thành
+                    Tích chọn để đồng bộ tiến độ với Giảng viên
                   </span>
                 </div>
 
-                {currentAdvisorTasks.length === 0 ? (
+                {isLoadingTasks ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-16 w-full rounded-xl" />
+                    <Skeleton className="h-16 w-full rounded-xl" />
+                  </div>
+                ) : currentAdvisorTasks.length === 0 ? (
                   <Card className="border-slate-200 bg-white p-6 text-center shadow-xs">
                     <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-500 mb-2" />
                     <p className="text-xs text-slate-600 font-semibold">
-                      Chưa có nhiệm vụ cụ thể nào được giao cho môn này.
+                      Chưa có nhiệm vụ cải thiện nào được giảng viên giao cho
+                      môn {selectedAdvisor.courseCode}.
                     </p>
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Em có thể tự thêm nhiệm vụ cá nhân ở biểu mẫu bên dưới.
+                      Khi giảng viên tạo đầu việc can thiệp trên hệ thống, danh
+                      sách sẽ tự động hiển thị tại đây.
                     </p>
                   </Card>
                 ) : (
@@ -1777,11 +1691,11 @@ export const StudentAdvisingPage = () => {
                         key={task.id}
                         role="button"
                         tabIndex={0}
-                        onClick={() => handleToggleTask(task.id)}
+                        onClick={() => void handleToggleTask(task.id)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
-                            handleToggleTask(task.id);
+                            void handleToggleTask(task.id);
                           }
                         }}
                         className={cn(
@@ -1792,17 +1706,20 @@ export const StudentAdvisingPage = () => {
                         )}
                       >
                         <div className="flex items-start gap-3">
-                          <button
-                            type="button"
-                            aria-label={task.completed ? "Mark as incomplete" : "Mark as complete"}
-                            className="mt-0.5 text-slate-400 group-hover:text-blue-600 shrink-0 cursor-pointer"
+                          <span
+                            aria-label={
+                              task.completed
+                                ? "Đánh dấu chưa hoàn thành"
+                                : "Đánh dấu hoàn thành"
+                            }
+                            className="mt-0.5 text-slate-400 group-hover:text-blue-600 shrink-0"
                           >
                             {task.completed ? (
                               <CheckSquare className="h-4 w-4 text-emerald-600" />
                             ) : (
                               <Square className="h-4 w-4" />
                             )}
-                          </button>
+                          </span>
 
                           <div className="space-y-0.5">
                             <span
@@ -1827,82 +1744,37 @@ export const StudentAdvisingPage = () => {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Badge
-                            className={cn(
-                              "text-[10px] font-semibold",
-                              task.priority === "HIGH" && "bg-blue-100 text-blue-800 hover:bg-blue-100",
-                              task.priority === "MEDIUM" && "bg-amber-100 text-amber-800 hover:bg-amber-100",
-                              task.priority === "NORMAL" && "bg-slate-100 text-slate-700 hover:bg-slate-100",
-                            )}
-                          >
-                            {task.priority === "HIGH"
-                              ? "Ưu tiên cao"
-                              : task.priority === "MEDIUM"
-                                ? "Trung bình"
-                                : "Khuyến nghị"}
-                          </Badge>
-
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteTask(task.id);
-                            }}
-                            className="h-6 w-6 text-slate-300 hover:text-rose-600 cursor-pointer"
-                          >
-                            ×
-                          </Button>
-                        </div>
+                        <Badge
+                          className={cn(
+                            "text-[10px] font-semibold shrink-0",
+                            task.priority === "HIGH" &&
+                              "bg-blue-100 text-blue-800 hover:bg-blue-100",
+                            task.priority === "MEDIUM" &&
+                              "bg-amber-100 text-amber-800 hover:bg-amber-100",
+                            task.priority === "NORMAL" &&
+                              "bg-slate-100 text-slate-700 hover:bg-slate-100",
+                          )}
+                        >
+                          {task.priority === "HIGH"
+                            ? "Ưu tiên cao"
+                            : task.priority === "MEDIUM"
+                              ? "Trung bình"
+                              : "Khuyến nghị"}
+                        </Badge>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* Add New Task Form */}
-              <Card className="border-slate-200 bg-slate-50/70 shadow-2xs">
-                <CardHeader className="p-4 pb-2">
-                  <div className="flex items-center gap-1.5">
-                    <Plus className="h-3.5 w-3.5 text-blue-600" />
-                    <CardTitle className="text-xs font-bold text-slate-900">
-                      Thêm Nhiệm vụ Cải thiện Cá nhân
-                    </CardTitle>
-                  </div>
-                </CardHeader>
-
-                <CardContent className="p-4 pt-1">
-                  <form onSubmit={handleAddTask} className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-                    <Input
-                      type="text"
-                      placeholder="Nhập tên việc cần làm (ví dụ: Nộp bài tập lớn trước tuần 12)..."
-                      value={newTaskTitle}
-                      onChange={(e) => setNewTaskTitle(e.target.value)}
-                      className="h-9 flex-1 text-xs bg-white border-slate-200 focus-visible:ring-blue-500"
-                    />
-
-                    <select
-                      value={newTaskPriority}
-                      onChange={(e) => setNewTaskPriority(e.target.value as "HIGH" | "MEDIUM" | "NORMAL")}
-                      className="h-9 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="HIGH">Ưu tiên cao</option>
-                      <option value="MEDIUM">Trung bình</option>
-                      <option value="NORMAL">Khuyến nghị</option>
-                    </select>
-
-                    <Button
-                      type="submit"
-                      disabled={!newTaskTitle.trim()}
-                      className="h-9 bg-blue-600 px-4 text-xs font-semibold text-white hover:bg-blue-700 cursor-pointer shadow-2xs shrink-0"
-                    >
-                      <Plus className="mr-1 h-3.5 w-3.5" />
-                      Thêm việc
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-xs text-slate-600 flex items-start gap-2.5">
+                <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                <p>
+                  Nhiệm vụ cải thiện được giảng viên giao trực tiếp theo tiến độ
+                  môn học. Mỗi khi bạn đánh dấu hoàn thành, trạng thái sẽ được
+                  lưu ngay trên máy chủ để giảng viên theo dõi.
+                </p>
+              </div>
             </div>
           )}
         </div>

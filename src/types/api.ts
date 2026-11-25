@@ -173,8 +173,19 @@ export interface CoursePrerequisite {
   relation_type: string // 'PREREQ', 'COREQ'
 }
 
+export interface CourseAssessment {
+  course_code: string
+  course_category: string | null
+  quiz: number | null
+  lab: number | null
+  btl: number | null
+  giua_ky: number | null
+  cuoi_ky: number | null
+}
+
 export interface CourseDetail extends Course {
   prerequisites: CoursePrerequisite[]
+  assessment?: CourseAssessment | null
 }
 
 export interface CourseCreatePayload {
@@ -360,7 +371,7 @@ export interface ModelHealthResponse {
   model_status: 'loaded' | 'not_loaded' | string
   fail_threshold: number
   total_records_cached: number
-  metrics: Record<string, any>
+  metrics: Record<string, unknown>
 }
 
 export interface ClassRiskFactor {
