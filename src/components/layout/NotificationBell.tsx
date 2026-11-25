@@ -86,22 +86,20 @@ export const NotificationBell = ({
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<NotificationDirection>("all");
   const [limit, setLimit] = useState<number>(DEFAULT_PAGE_SIZE);
+  const [isOpen, setIsOpen] = useState<boolean>(false);
 
   const {
     data: notificationData,
     isLoading,
     isFetching,
     refetch: refetchNotifications,
-  } = useAdvisingNotifications(filter, limit, enabled);
+  } = useAdvisingNotifications(filter, limit, enabled && isOpen);
 
   const markSessionReadMutation = useMarkSessionRead();
   const markAllReadMutation = useMarkAllNotificationsRead();
 
   const items = notificationData?.items ?? [];
-  const effectiveUnreadCount = Math.max(
-    unreadCount,
-    notificationData?.unread_count ?? 0,
-  );
+  const effectiveUnreadCount = unreadCount;
   const receivedCount = notificationData?.received_count ?? 0;
   const sentCount = notificationData?.sent_count ?? 0;
   const allCount = receivedCount + sentCount;
@@ -126,6 +124,7 @@ export const NotificationBell = ({
   };
 
   const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
     if (open) {
       handleRefresh();
     }

@@ -111,6 +111,8 @@ export interface BookingAppointment {
   timeSlot: string;
   meetingType: "OFFICE" | "ONLINE";
   notes?: string;
+  createdById?: string | null;
+  createdByRole?: string | null;
   status: AppointmentStatus;
   createdAt: string;
   location: string;
@@ -359,9 +361,13 @@ export const StudentAdvisingPage = () => {
     setCustomSlot(null);
     const chosen = advisors.find((a) => a.id === advisorId);
     if (chosen?.courseCode && serverSessions) {
-      const matched = serverSessions.find(
-        (s) => s.course_code === chosen.courseCode,
-      );
+      const matched =
+        serverSessions.find(
+          (s) =>
+            s.course_code === chosen.courseCode &&
+            s.semester_code === activeSemesterCode,
+        ) ??
+        serverSessions.find((s) => s.course_code === chosen.courseCode);
       if (matched && matched.unread_count > 0) {
         markSessionReadMutation.mutate(matched.id);
       }
@@ -589,11 +595,34 @@ export const StudentAdvisingPage = () => {
       timeSlot: a.time_slot,
       meetingType: a.meeting_type,
       notes: a.notes || undefined,
+      createdById: a.created_by_id ?? null,
+      createdByRole: a.created_by_role ?? null,
       status: a.status,
       createdAt: new Date(a.created_at).toLocaleDateString("vi-VN"),
       location: a.location,
     }));
   }, [activeSessionId, serverAppointments, selectedAdvisor.id, selectedAdvisor.name]);
+
+  const handleConfirmAppointment = async (appointmentId: string) => {
+    if (!activeSessionId) return;
+    try {
+      await updateAppointmentStatusMutation.mutateAsync({
+        sessionId: activeSessionId,
+        appointmentId,
+        payload: { status: "CONFIRMED" },
+      });
+      toast.success("Đã xác nhận lịch hẹn với Thầy/Cô!", {
+        description: "Thông báo xác nhận đã được gửi tới giảng viên.",
+      });
+    } catch (err) {
+      toast.error(
+        extractErrorMessage(
+          err,
+          "Không thể xác nhận lịch hẹn lúc này. Vui lòng thử lại.",
+        ),
+      );
+    }
+  };
 
   const handleCancelAppointment = async (appointmentId: string) => {
     if (!activeSessionId) return;
@@ -1111,31 +1140,6 @@ export const StudentAdvisingPage = () => {
           {/* TAB 1: Hộp thư Trao đổi Trực tiếp */}
           {canCreateSession && activeTab === "feed" && (
             <div className="space-y-5">
-              {/* Course Office Hours Notice */}
-              <Card className="border-blue-200 bg-blue-50/20 shadow-xs">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Badge className="bg-blue-100 text-[10px] font-semibold text-blue-700 hover:bg-blue-100">
-                          Office Hours
-                        </Badge>
-                        <h4 className="text-xs font-bold text-slate-900">
-                          Lịch tiếp sinh viên môn {selectedAdvisor.courseCode}
-                        </h4>
-                      </div>
-                      <p className="text-xs leading-relaxed text-slate-700 pt-1">
-                        {selectedAdvisor.name} tiếp sinh viên tại{" "}
-                        <strong>{selectedAdvisor.office}</strong> vào khung giờ{" "}
-                        <strong>{selectedAdvisor.officeHours}</strong>. Sinh
-                        viên có câu hỏi chuyên môn hoặc cần trao đổi điểm số vui
-                        lòng nhắn tin trực tiếp bên dưới hoặc đặt lịch hẹn.
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
               {/* Quick Requests Bar */}
               <Card className="border-slate-200 bg-slate-50/70 shadow-2xs">
                 <CardHeader className="p-4 pb-2">
@@ -1530,86 +1534,127 @@ export const StudentAdvisingPage = () => {
                   </Card>
                 ) : (
                   <div className="space-y-2.5">
-                    {currentAppointments.map((apt) => (
-                      <Card
-                        key={apt.id}
-                        className="border-slate-200 bg-white shadow-xs"
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="space-y-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-xs font-bold text-slate-900">
-                                  {apt.subject}
-                                </span>
-                                {apt.status === "CONFIRMED" && (
-                                  <Badge className="bg-emerald-100 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 border-emerald-200">
-                                    <CheckCircle2 className="mr-1 h-3 w-3" /> Đã
-                                    xác nhận
-                                  </Badge>
-                                )}
-                                {apt.status === "PENDING" && (
-                                  <Badge className="bg-amber-100 text-[10px] font-semibold text-amber-800 hover:bg-amber-100 border-amber-200">
-                                    <Clock className="mr-1 h-3 w-3" /> Đang chờ
-                                    duyệt
-                                  </Badge>
-                                )}
-                                {apt.status === "COMPLETED" && (
-                                  <Badge className="bg-blue-100 text-[10px] font-semibold text-blue-700 hover:bg-blue-100 border-blue-200">
-                                    <CheckCircle2 className="mr-1 h-3 w-3" /> Đã
-                                    hoàn thành
-                                  </Badge>
-                                )}
-                                {apt.status === "CANCELLED" && (
-                                  <Badge className="bg-slate-100 text-[10px] font-semibold text-slate-600 hover:bg-slate-100 border-slate-200">
-                                    <XCircle className="mr-1 h-3 w-3" /> Đã hủy
-                                  </Badge>
-                                )}
-                              </div>
+                    {currentAppointments.map((apt) => {
+                      const isCreatedByStudent = apt.createdById
+                        ? apt.createdById === studentId
+                        : apt.createdByRole === "student";
+                      const canStudentConfirm =
+                        apt.status === "PENDING" && !isCreatedByStudent;
 
-                              <p className="text-xs font-medium text-slate-600">
-                                Với Thầy/Cô:{" "}
-                                <span className="font-semibold text-slate-900">
-                                  {apt.advisorName}
-                                </span>
-                              </p>
+                      return (
+                        <Card
+                          key={apt.id}
+                          className={cn(
+                            "bg-white shadow-xs transition-all",
+                            canStudentConfirm
+                              ? "border-amber-300 bg-amber-50/30"
+                              : "border-slate-200",
+                          )}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-xs font-bold text-slate-900">
+                                    {apt.subject}
+                                  </span>
+                                  {apt.status === "CONFIRMED" && (
+                                    <Badge className="bg-emerald-100 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 border-emerald-200">
+                                      <CheckCircle2 className="mr-1 h-3 w-3" /> Đã
+                                      xác nhận
+                                    </Badge>
+                                  )}
+                                  {apt.status === "PENDING" &&
+                                    (canStudentConfirm ? (
+                                      <Badge className="bg-amber-100 text-[10px] font-semibold text-amber-800 hover:bg-amber-100 border-amber-300">
+                                        <Clock className="mr-1 h-3 w-3" /> Chờ bạn
+                                        xác nhận
+                                      </Badge>
+                                    ) : (
+                                      <Badge className="bg-slate-100 text-[10px] font-semibold text-slate-700 hover:bg-slate-100 border-slate-200">
+                                        <Clock className="mr-1 h-3 w-3" /> Đang
+                                        chờ Thầy/Cô xác nhận
+                                      </Badge>
+                                    ))}
+                                  {apt.status === "COMPLETED" && (
+                                    <Badge className="bg-blue-100 text-[10px] font-semibold text-blue-700 hover:bg-blue-100 border-blue-200">
+                                      <CheckCircle2 className="mr-1 h-3 w-3" /> Đã
+                                      hoàn thành
+                                    </Badge>
+                                  )}
+                                  {apt.status === "CANCELLED" && (
+                                    <Badge className="bg-slate-100 text-[10px] font-semibold text-slate-600 hover:bg-slate-100 border-slate-200">
+                                      <XCircle className="mr-1 h-3 w-3" /> Đã hủy
+                                    </Badge>
+                                  )}
+                                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                                    {isCreatedByStudent
+                                      ? "Do bạn đặt"
+                                      : "Lời mời từ Giảng viên"}
+                                  </span>
+                                </div>
 
-                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-[11px] text-slate-500">
-                                <span className="flex items-center gap-1 font-medium text-blue-700">
-                                  <Clock className="h-3 w-3" /> {apt.timeSlot}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <MapPin className="h-3 w-3" /> {apt.location}
-                                </span>
-                              </div>
-
-                              {apt.notes && (
-                                <p className="text-[11px] text-slate-500 italic pt-1">
-                                  Ghi chú: {apt.notes}
+                                <p className="text-xs font-medium text-slate-600">
+                                  Với Thầy/Cô:{" "}
+                                  <span className="font-semibold text-slate-900">
+                                    {apt.advisorName}
+                                  </span>
                                 </p>
-                              )}
-                            </div>
 
-                            {(apt.status === "PENDING" ||
-                              apt.status === "CONFIRMED") && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                disabled={
-                                  updateAppointmentStatusMutation.isPending
-                                }
-                                onClick={() =>
-                                  void handleCancelAppointment(apt.id)
-                                }
-                                className="text-xs text-slate-400 hover:text-rose-600 cursor-pointer self-start sm:self-center"
-                              >
-                                Hủy lịch
-                              </Button>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-[11px] text-slate-500">
+                                  <span className="flex items-center gap-1 font-medium text-blue-700">
+                                    <Clock className="h-3 w-3" /> {apt.timeSlot}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" /> {apt.location}
+                                  </span>
+                                </div>
+
+                                {apt.notes && (
+                                  <p className="text-[11px] text-slate-500 italic pt-1">
+                                    Ghi chú: {apt.notes}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-1.5 shrink-0 self-start sm:self-center">
+                                {canStudentConfirm && (
+                                  <Button
+                                    size="sm"
+                                    disabled={
+                                      updateAppointmentStatusMutation.isPending
+                                    }
+                                    onClick={() =>
+                                      void handleConfirmAppointment(apt.id)
+                                    }
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs cursor-pointer gap-1"
+                                  >
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    <span>Xác nhận lịch hẹn</span>
+                                  </Button>
+                                )}
+                                {(apt.status === "PENDING" ||
+                                  apt.status === "CONFIRMED") && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={
+                                      updateAppointmentStatusMutation.isPending
+                                    }
+                                    onClick={() =>
+                                      void handleCancelAppointment(apt.id)
+                                    }
+                                    className="text-xs text-slate-400 hover:text-rose-600 cursor-pointer"
+                                  >
+                                    Hủy lịch
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
                   </div>
                 )}
               </div>

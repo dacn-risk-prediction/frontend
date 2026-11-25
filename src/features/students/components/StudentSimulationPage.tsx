@@ -96,7 +96,7 @@ function calculateFinalExamTargets(
   };
 
   return {
-    pass: calcTarget(5.0), // Qua môn (Điểm tổng kết >= 5.0)
+    pass: calcTarget(4.0), // Qua môn (Điểm tổng kết >= 4.0, thang điểm D / GPA 1.0)
     gradeB: calcTarget(7.0), // Điểm B - Khá (Điểm tổng kết >= 7.0)
     gradeA: calcTarget(8.5), // Điểm A - Giỏi (Điểm tổng kết >= 8.5)
     hasRecordedMarks: processScore !== null,
@@ -645,7 +645,7 @@ export const StudentSimulationPage = () => {
                   <>
                     <div className="flex items-baseline justify-between">
                       <span className="text-xs text-slate-400">
-                        {counterfactualData ? "Để Qua môn (≥ 4.0):" : "Để Qua môn (≥ 5.0):"}
+                        Để Qua môn (≥ 4.0):
                       </span>
                       <span className="text-base font-extrabold text-emerald-400">
                         {counterfactualData?.final_exam_targets

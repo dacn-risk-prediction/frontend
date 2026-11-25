@@ -31,10 +31,7 @@ import {
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import {
-  useAdvisingSessions,
-  useUnreadAdvisingCount,
-} from "@/features/advising/api/advising-api";
+import { useUnreadAdvisingCount } from "@/features/advising/api/advising-api";
 import { NotificationBell } from "./NotificationBell";
 
 interface NavItem {
@@ -85,12 +82,7 @@ export const StudentLayout = () => {
   const logout = useLogout();
   const activeSemesterLabel = formatSemesterLabel(activeSemester?.semester_code);
   const { data: unreadData } = useUnreadAdvisingCount(!!user);
-  const { data: advisingSessions = [] } = useAdvisingSessions(!!user);
-  const sessionUnreadTotal = advisingSessions.reduce(
-    (sum, s) => sum + (s.unread_count ?? 0),
-    0,
-  );
-  const unreadCount = Math.max(unreadData?.unread_count ?? 0, sessionUnreadTotal);
+  const unreadCount = unreadData?.unread_count ?? 0;
 
   const navItems = useMemo<NavItem[]>(() => {
     return NAV_ITEMS.map((item) => {

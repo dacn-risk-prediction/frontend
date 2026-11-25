@@ -49,6 +49,7 @@ export const useLogout = () => {
   return () => {
     localStorage.removeItem("access_token")
     localStorage.removeItem("refresh_token")
+    delete apiClient.defaults.headers.common["Authorization"]
     queryClient.setQueryData(AUTH_QUERY_KEY, null)
     queryClient.clear()
     window.location.href = "/login"

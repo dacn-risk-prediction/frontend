@@ -103,6 +103,8 @@ export interface BookingAppointment {
   timeSlot: string;
   meetingType: "OFFICE" | "ONLINE";
   notes?: string;
+  createdById?: string | null;
+  createdByRole?: string | null;
   status: AppointmentStatus;
   createdAt: string;
   location: string;
@@ -335,11 +337,18 @@ export const LecturerInterventionsPage = () => {
   const markSessionReadMutation = useMarkSessionRead();
 
   const handleSelectStudent = (student: StudentAdvisingProfile) => {
-    const matched = serverSessions?.find(
-      (s) =>
-        s.student_id === student.studentId &&
-        s.course_code === student.courseCode,
-    );
+    const matched =
+      serverSessions?.find(
+        (s) =>
+          s.student_id === student.studentId &&
+          s.course_code === student.courseCode &&
+          s.semester_code === activeSemesterCode,
+      ) ??
+      serverSessions?.find(
+        (s) =>
+          s.student_id === student.studentId &&
+          s.course_code === student.courseCode,
+      );
     if (matched && matched.unread_count > 0) {
       markSessionReadMutation.mutate(matched.id);
     }
@@ -354,10 +363,15 @@ export const LecturerInterventionsPage = () => {
   const sessionMapByStudentCourse = useMemo(() => {
     const map = new Map<string, (typeof serverSessions extends Array<infer T> | undefined ? T : never)>();
     for (const s of serverSessions ?? []) {
-      map.set(`${s.student_id}::${s.course_code}`, s);
+      const key = `${s.student_id}::${s.course_code}`;
+      const existing = map.get(key);
+      // Prefer active semester session so older terms do not overwrite current term unread state
+      if (!existing || s.semester_code === activeSemesterCode) {
+        map.set(key, s);
+      }
     }
     return map;
-  }, [serverSessions]);
+  }, [serverSessions, activeSemesterCode]);
 
   const activeSession = useMemo(() => {
     if (!serverSessions || !selectedStudent) return null;
@@ -471,6 +485,8 @@ export const LecturerInterventionsPage = () => {
       timeSlot: a.time_slot,
       meetingType: a.meeting_type,
       notes: a.notes || undefined,
+      createdById: a.created_by_id ?? null,
+      createdByRole: a.created_by_role ?? null,
       status: a.status,
       createdAt: new Date(a.created_at).toLocaleDateString("vi-VN"),
       location: a.location,
@@ -1016,56 +1032,24 @@ export const LecturerInterventionsPage = () => {
                           </div>
                         </div>
 
-                        <div className="flex flex-col items-end gap-1 shrink-0">
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "px-1.5 py-0 text-[10px] font-semibold",
-                              student.riskLevel === "CRITICAL" &&
-                                "border-rose-300 bg-rose-50 text-rose-700",
-                              student.riskLevel === "WARNING" &&
-                                "border-amber-300 bg-amber-50 text-amber-700",
-                              student.riskLevel === "SAFE" &&
-                                "border-emerald-300 bg-emerald-50 text-emerald-700",
-                            )}
-                          >
-                            {Math.round(student.failProbability * 100)}% rớt
-                          </Badge>
-                          {studentSession && studentSession.unread_count > 0 && (
+                        {studentSession && studentSession.unread_count > 0 && (
+                          <div className="flex flex-col items-end shrink-0">
                             <Badge className="bg-blue-600 text-[9px] text-white px-1.5 py-0">
                               {studentSession.unread_count} tin mới
                             </Badge>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-100/80 pt-1.5 mt-0.5">
                         <span className="font-medium text-slate-700">
                           {student.courseCode} ({student.classGroup})
                         </span>
-                        <div className="flex items-center gap-1.5">
-                          {student.retaken && (
-                            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1 rounded">
-                              Học lại
-                            </span>
-                          )}
-                          <span
-                            className={cn(
-                              "font-bold",
-                              student.giuaKy !== null && student.giuaKy < 4.0
-                                ? "text-rose-600"
-                                : student.giuaKy !== null &&
-                                    student.giuaKy < 6.0
-                                  ? "text-amber-600"
-                                  : "text-slate-700",
-                            )}
-                          >
-                            GK:{" "}
-                            {student.giuaKy !== null
-                              ? `${student.giuaKy.toFixed(1)}/10`
-                              : "Chưa có"}
+                        {student.retaken && (
+                          <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                            Học lại
                           </span>
-                        </div>
+                        )}
                       </div>
                     </button>
                   );
@@ -1442,10 +1426,7 @@ export const LecturerInterventionsPage = () => {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-700 uppercase">
-                          Lịch hẹn đã đăng ký của sinh viên
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          Dữ liệu đồng bộ trực tiếp với ứng dụng sinh viên
+                          Danh sách lịch hẹn trao đổi
                         </span>
                       </div>
 
@@ -1458,140 +1439,159 @@ export const LecturerInterventionsPage = () => {
                             Chưa có lịch hẹn nào
                           </p>
                           <p className="text-slate-400 mt-0.5">
-                            Sinh viên chưa gửi phiếu hẹn cho môn{" "}
+                            Chưa có phiếu hẹn nào được tạo cho môn{" "}
                             {selectedStudent.courseCode}.
                           </p>
                         </div>
                       ) : (
                         <div className="space-y-2.5">
-                          {appointments.map((book) => (
-                            <div
-                              key={book.id}
-                              className={cn(
-                                "rounded-xl border p-3.5 transition-all bg-white shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3",
-                                book.status === "PENDING"
-                                  ? "border-amber-300 bg-amber-50/30"
-                                  : "border-slate-200",
-                              )}
-                            >
-                              <div className="space-y-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge
-                                    variant="outline"
-                                    className={cn(
-                                      "text-[10px] font-bold px-1.5 py-0",
-                                      book.status === "CONFIRMED" &&
-                                        "border-emerald-300 bg-emerald-50 text-emerald-700",
-                                      book.status === "PENDING" &&
-                                        "border-amber-300 bg-amber-50 text-amber-700",
-                                      book.status === "COMPLETED" &&
-                                        "border-blue-300 bg-blue-50 text-blue-700",
-                                      book.status === "CANCELLED" &&
-                                        "border-slate-300 bg-slate-100 text-slate-600",
-                                    )}
-                                  >
-                                    {book.status === "CONFIRMED" &&
-                                      "✅ Đã xác nhận"}
-                                    {book.status === "PENDING" &&
-                                      "⏳ Chờ Thầy/Cô duyệt"}
-                                    {book.status === "COMPLETED" &&
-                                      "✔ Đã hoàn thành"}
-                                    {book.status === "CANCELLED" && "✕ Đã hủy"}
-                                  </Badge>
-                                  <span className="text-xs font-bold text-slate-900">
-                                    {book.subject}
-                                  </span>
+                          {appointments.map((book) => {
+                            const isCreatedByLecturer = book.createdById
+                              ? book.createdById === lecturerId
+                              : book.createdByRole === "lecturer";
+                            const canLecturerConfirm =
+                              book.status === "PENDING" && !isCreatedByLecturer;
+
+                            return (
+                              <div
+                                key={book.id}
+                                className={cn(
+                                  "rounded-xl border p-3.5 transition-all bg-white shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3",
+                                  canLecturerConfirm
+                                    ? "border-amber-300 bg-amber-50/30"
+                                    : "border-slate-200",
+                                )}
+                              >
+                                <div className="space-y-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        "text-[10px] font-bold px-1.5 py-0",
+                                        book.status === "CONFIRMED" &&
+                                          "border-emerald-300 bg-emerald-50 text-emerald-700",
+                                        book.status === "PENDING" &&
+                                          canLecturerConfirm &&
+                                          "border-amber-300 bg-amber-50 text-amber-800",
+                                        book.status === "PENDING" &&
+                                          !canLecturerConfirm &&
+                                          "border-slate-300 bg-slate-50 text-slate-700",
+                                        book.status === "COMPLETED" &&
+                                          "border-blue-300 bg-blue-50 text-blue-700",
+                                        book.status === "CANCELLED" &&
+                                          "border-slate-300 bg-slate-100 text-slate-600",
+                                      )}
+                                    >
+                                      {book.status === "CONFIRMED" &&
+                                        "✅ Đã xác nhận"}
+                                      {book.status === "PENDING" &&
+                                        (canLecturerConfirm
+                                          ? "📩 Chờ bạn xác nhận"
+                                          : "⏳ Chờ Sinh viên xác nhận")}
+                                      {book.status === "COMPLETED" &&
+                                        "✔ Đã hoàn thành"}
+                                      {book.status === "CANCELLED" && "✕ Đã hủy"}
+                                    </Badge>
+                                    <span className="text-xs font-bold text-slate-900">
+                                      {book.subject}
+                                    </span>
+                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                                      {isCreatedByLecturer
+                                        ? "Do Thầy/Cô đặt"
+                                        : "Do Sinh viên đặt"}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                                    <span className="flex items-center gap-1 text-slate-700 font-medium">
+                                      <Clock className="h-3.5 w-3.5 text-blue-600" />
+                                      {book.timeSlot}
+                                    </span>
+                                    <span>•</span>
+                                    <span className="flex items-center gap-1 text-slate-500">
+                                      {book.meetingType === "ONLINE" ? (
+                                        <>
+                                          <Video className="h-3.5 w-3.5 text-purple-600" />
+                                          <span>Gặp Online</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Building2 className="h-3.5 w-3.5 text-emerald-600" />
+                                          <span>Tại Văn phòng</span>
+                                        </>
+                                      )}
+                                    </span>
+                                  </div>
+
+                                  {book.notes && (
+                                    <p className="text-xs text-slate-500 italic">
+                                      Ghi chú: &ldquo;{book.notes}&rdquo;
+                                    </p>
+                                  )}
                                 </div>
 
-                                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
-                                  <span className="flex items-center gap-1 text-slate-700 font-medium">
-                                    <Clock className="h-3.5 w-3.5 text-blue-600" />
-                                    {book.timeSlot}
-                                  </span>
-                                  <span>•</span>
-                                  <span className="flex items-center gap-1 text-slate-500">
-                                    {book.meetingType === "ONLINE" ? (
-                                      <>
-                                        <Video className="h-3.5 w-3.5 text-purple-600" />
-                                        <span>Gặp Online</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Building2 className="h-3.5 w-3.5 text-emerald-600" />
-                                        <span>Tại Văn phòng</span>
-                                      </>
-                                    )}
-                                  </span>
+                                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                  {canLecturerConfirm && (
+                                    <Button
+                                      size="sm"
+                                      disabled={
+                                        updateAppointmentStatusMutation.isPending
+                                      }
+                                      onClick={() =>
+                                        void handleUpdateBookingStatus(
+                                          book.id,
+                                          "CONFIRMED",
+                                        )
+                                      }
+                                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs cursor-pointer gap-1"
+                                    >
+                                      <CheckCircle2 className="h-3.5 w-3.5" />
+                                      <span>Xác nhận lịch hẹn</span>
+                                    </Button>
+                                  )}
+                                  {book.status === "CONFIRMED" && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={
+                                        updateAppointmentStatusMutation.isPending
+                                      }
+                                      onClick={() =>
+                                        void handleUpdateBookingStatus(
+                                          book.id,
+                                          "COMPLETED",
+                                        )
+                                      }
+                                      className="border-blue-200 text-blue-700 hover:bg-blue-50 text-xs cursor-pointer gap-1"
+                                    >
+                                      <CheckCircle2 className="h-3.5 w-3.5" />
+                                      <span>Hoàn thành</span>
+                                    </Button>
+                                  )}
+                                  {(book.status === "PENDING" ||
+                                    book.status === "CONFIRMED") && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      disabled={
+                                        updateAppointmentStatusMutation.isPending
+                                      }
+                                      onClick={() =>
+                                        void handleUpdateBookingStatus(
+                                          book.id,
+                                          "CANCELLED",
+                                        )
+                                      }
+                                      className="text-xs text-slate-500 hover:text-rose-600 cursor-pointer gap-1"
+                                    >
+                                      <XCircle className="h-3.5 w-3.5" />
+                                      <span>Hủy</span>
+                                    </Button>
+                                  )}
                                 </div>
-
-                                {book.notes && (
-                                  <p className="text-xs text-slate-500 italic">
-                                    Ghi chú: &ldquo;{book.notes}&rdquo;
-                                  </p>
-                                )}
                               </div>
-
-                              <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                                {book.status === "PENDING" && (
-                                  <Button
-                                    size="sm"
-                                    disabled={
-                                      updateAppointmentStatusMutation.isPending
-                                    }
-                                    onClick={() =>
-                                      void handleUpdateBookingStatus(
-                                        book.id,
-                                        "CONFIRMED",
-                                      )
-                                    }
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs cursor-pointer gap-1"
-                                  >
-                                    <CheckCircle2 className="h-3.5 w-3.5" />
-                                    <span>Chấp nhận</span>
-                                  </Button>
-                                )}
-                                {book.status === "CONFIRMED" && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={
-                                      updateAppointmentStatusMutation.isPending
-                                    }
-                                    onClick={() =>
-                                      void handleUpdateBookingStatus(
-                                        book.id,
-                                        "COMPLETED",
-                                      )
-                                    }
-                                    className="border-blue-200 text-blue-700 hover:bg-blue-50 text-xs cursor-pointer gap-1"
-                                  >
-                                    <CheckCircle2 className="h-3.5 w-3.5" />
-                                    <span>Hoàn thành</span>
-                                  </Button>
-                                )}
-                                {(book.status === "PENDING" ||
-                                  book.status === "CONFIRMED") && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    disabled={
-                                      updateAppointmentStatusMutation.isPending
-                                    }
-                                    onClick={() =>
-                                      void handleUpdateBookingStatus(
-                                        book.id,
-                                        "CANCELLED",
-                                      )
-                                    }
-                                    className="text-xs text-slate-500 hover:text-rose-600 cursor-pointer gap-1"
-                                  >
-                                    <XCircle className="h-3.5 w-3.5" />
-                                    <span>Hủy</span>
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
