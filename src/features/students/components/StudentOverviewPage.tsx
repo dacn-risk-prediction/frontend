@@ -556,7 +556,7 @@ export const StudentOverviewPage = () => {
               </span>
             ) : (
               <>
-                <span className="rounded bg-sky-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-sky-300">
+                <span className="rounded bg-sky-500/20 px-1.5 py-0.5 font-mono text-xs font-semibold text-sky-300">
                   {currentTermEnrollment.termCode}
                 </span>
                 <span>Đang theo học</span>
@@ -607,7 +607,7 @@ export const StudentOverviewPage = () => {
                 <Badge
                   variant="outline"
                   className={cn(
-                    "text-[11px] font-semibold tabular-nums",
+                    "text-xs font-semibold tabular-nums",
                     academicMet
                       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                       : "border-blue-200 bg-blue-50 text-blue-700",
@@ -671,7 +671,7 @@ export const StudentOverviewPage = () => {
                 <Badge
                   variant="outline"
                   className={cn(
-                    "gap-1 text-[11px] font-semibold",
+                    "gap-1 text-xs font-semibold",
                     englishPassed
                       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                       : "border-amber-200 bg-amber-50 text-amber-800",
@@ -722,7 +722,7 @@ export const StudentOverviewPage = () => {
                 <Badge
                   variant="outline"
                   className={cn(
-                    "text-[11px] font-semibold tabular-nums",
+                    "text-xs font-semibold tabular-nums",
                     isGradReadyCtxh
                       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                       : isKltnReady
@@ -903,7 +903,7 @@ export const StudentOverviewPage = () => {
 
                   {/* Y-Axis Labels */}
                   <g
-                    className="fill-slate-400 text-[10px] font-medium tabular-nums"
+                    className="fill-slate-400 text-xs font-medium tabular-nums"
                     textAnchor="end"
                   >
                     <text x="44" y="34">
@@ -1007,7 +1007,7 @@ export const StudentOverviewPage = () => {
                             x={pt.x}
                             y={196}
                             textAnchor="middle"
-                            className="fill-blue-700 text-[11px] font-bold"
+                            className="fill-blue-700 text-xs font-bold"
                           >
                             {pt.code}
                           </text>
@@ -1055,7 +1055,7 @@ export const StudentOverviewPage = () => {
                         <text
                           x={pt.x}
                           y={pt.y - 11}
-                          className="fill-slate-700 text-[11px] font-semibold tabular-nums"
+                          className="fill-slate-700 text-xs font-semibold tabular-nums"
                           textAnchor="middle"
                         >
                           {pt.gpa.toFixed(2)}
@@ -1065,7 +1065,7 @@ export const StudentOverviewPage = () => {
                           x={pt.x}
                           y={196}
                           textAnchor="middle"
-                          className="fill-slate-600 text-[11px] font-medium"
+                          className="fill-slate-600 text-xs font-medium"
                         >
                           {pt.code}
                         </text>
@@ -1163,7 +1163,7 @@ export const StudentOverviewPage = () => {
                           {course.retaken && (
                             <Badge
                               variant="outline"
-                              className="h-4.5 border-amber-200 bg-amber-50 px-1.5 text-[10px] font-semibold text-amber-800"
+                              className="h-5 border-amber-200 bg-amber-50 px-2 text-xs font-semibold text-amber-800"
                             >
                               Học lại
                             </Badge>
@@ -1172,7 +1172,7 @@ export const StudentOverviewPage = () => {
                         <p className="truncate text-xs font-medium text-slate-800">
                           {course.course_name}
                         </p>
-                        <p className="truncate text-[11px] text-slate-500">
+                        <p className="truncate text-xs text-slate-500">
                           {metadataParts.join(" · ")}
                         </p>
                       </div>

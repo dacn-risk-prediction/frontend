@@ -1,0 +1,372 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-26T23:18:00+07:00",
+  "title": "Design System: Academic Advising & XAI Portal",
+  "extensions": {
+    "colorMeta": {
+      "aurora-blue": {
+        "role": "primary",
+        "displayName": "Aurora Blue",
+        "canonical": "#1488db",
+        "tonalRamp": [
+          "#06253d",
+          "#0b3e66",
+          "#0f5891",
+          "#1488db",
+          "#3aa0e8",
+          "#70bbf0",
+          "#b0daf7",
+          "#eef5fc"
+        ]
+      },
+      "aurora-blue-hover": {
+        "role": "primary",
+        "displayName": "Aurora Blue Hover",
+        "canonical": "#1176be",
+        "tonalRamp": [
+          "#051f33",
+          "#093657",
+          "#0d4d7d",
+          "#1176be",
+          "#3292d6",
+          "#66b1e6",
+          "#a8d4f5",
+          "#e6f2fb"
+        ]
+      },
+      "deep-academic-navy": {
+        "role": "secondary",
+        "displayName": "Deep Academic Navy",
+        "canonical": "#030391",
+        "tonalRamp": [
+          "#01012b",
+          "#02024d",
+          "#02026e",
+          "#030391",
+          "#2d2db8",
+          "#6161d1",
+          "#a3a3e8",
+          "#ebebfa"
+        ]
+      },
+      "sky-tint": {
+        "role": "secondary",
+        "displayName": "Sky Tint",
+        "canonical": "#eef5fc",
+        "tonalRamp": [
+          "#122436",
+          "#203c59",
+          "#345980",
+          "#527ca6",
+          "#7fa4c9",
+          "#abc7e3",
+          "#d1e3f5",
+          "#eef5fc"
+        ]
+      },
+      "slate-canvas": {
+        "role": "neutral",
+        "displayName": "Slate Canvas",
+        "canonical": "#f8fafc",
+        "tonalRamp": [
+          "#0f172a",
+          "#1e293b",
+          "#334155",
+          "#475569",
+          "#64748b",
+          "#94a3b8",
+          "#cbd5e1",
+          "#f8fafc"
+        ]
+      },
+      "surface-white": {
+        "role": "neutral",
+        "displayName": "Surface White",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#111827",
+          "#374151",
+          "#4b5563",
+          "#6b7280",
+          "#9ca3af",
+          "#d1d5db",
+          "#f3f4f6",
+          "#ffffff"
+        ]
+      },
+      "surface-muted": {
+        "role": "neutral",
+        "displayName": "Surface Muted",
+        "canonical": "#f1f5f9",
+        "tonalRamp": [
+          "#0f172a",
+          "#1e293b",
+          "#334155",
+          "#475569",
+          "#64748b",
+          "#94a3b8",
+          "#cbd5e1",
+          "#f1f5f9"
+        ]
+      },
+      "obsidian-kpi": {
+        "role": "neutral",
+        "displayName": "Obsidian KPI",
+        "canonical": "#0f172a",
+        "tonalRamp": [
+          "#060914",
+          "#0f172a",
+          "#1e293b",
+          "#334155",
+          "#475569",
+          "#64748b",
+          "#94a3b8",
+          "#e2e8f0"
+        ]
+      },
+      "ink-primary": {
+        "role": "neutral",
+        "displayName": "Ink Primary",
+        "canonical": "#090e1a",
+        "tonalRamp": [
+          "#090e1a",
+          "#182238",
+          "#283654",
+          "#3c4d70",
+          "#5a6b8c",
+          "#8896b0",
+          "#c2cad9",
+          "#edf0f5"
+        ]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Ink Muted",
+        "canonical": "#64748b",
+        "tonalRamp": [
+          "#0f172a",
+          "#1e293b",
+          "#334155",
+          "#475569",
+          "#64748b",
+          "#94a3b8",
+          "#cbd5e1",
+          "#f1f5f9"
+        ]
+      },
+      "border-hairline": {
+        "role": "neutral",
+        "displayName": "Border Hairline",
+        "canonical": "#e2e8f0",
+        "tonalRamp": [
+          "#0f172a",
+          "#1e293b",
+          "#334155",
+          "#475569",
+          "#64748b",
+          "#94a3b8",
+          "#cbd5e1",
+          "#e2e8f0"
+        ]
+      },
+      "input-stroke": {
+        "role": "neutral",
+        "displayName": "Input Stroke",
+        "canonical": "#cbd5e1",
+        "tonalRamp": [
+          "#0f172a",
+          "#1e293b",
+          "#334155",
+          "#475569",
+          "#64748b",
+          "#94a3b8",
+          "#cbd5e1",
+          "#f1f5f9"
+        ]
+      },
+      "destructive-red": {
+        "role": "semantic",
+        "displayName": "Destructive Red",
+        "canonical": "#ef4444",
+        "tonalRamp": [
+          "#450a0a",
+          "#7f1d1d",
+          "#b91c1c",
+          "#ef4444",
+          "#f87171",
+          "#fca5a5",
+          "#fecaca",
+          "#fef2f2"
+        ]
+      },
+      "emerald-pass": {
+        "role": "semantic",
+        "displayName": "Emerald Pass",
+        "canonical": "#10b981",
+        "tonalRamp": [
+          "#022c22",
+          "#064e3b",
+          "#047857",
+          "#10b981",
+          "#34d399",
+          "#6ee7b7",
+          "#a7f3d0",
+          "#ecfdf5"
+        ]
+      },
+      "amber-warn": {
+        "role": "semantic",
+        "displayName": "Amber Warn",
+        "canonical": "#f59e0b",
+        "tonalRamp": [
+          "#451a03",
+          "#78350f",
+          "#b45309",
+          "#f59e0b",
+          "#fbbf24",
+          "#fcd34d",
+          "#fde68a",
+          "#fffbeb"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page headings and primary KPI figures."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section headers and secondary page titles."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card titles and chart headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Descriptions, advising messages, and table cells."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Status chips, KPI captions, and table column headers."
+      }
+    },
+    "shadows": [
+      {
+        "name": "subtle-resting",
+        "value": "0 1px 2px rgba(9, 14, 26, 0.04)",
+        "purpose": "Rest-state hairline lift for white cards and outline buttons."
+      },
+      {
+        "name": "card-focus",
+        "value": "0 1px 3px rgba(9, 14, 26, 0.08)",
+        "purpose": "Anchor depth for dark KPI cards and floating popovers."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-standard",
+        "value": "cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Default transition curve for hover, border, and focus state shifts."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Primary CTA button using Aurora Blue with crisp 8px corners.",
+      "html": "<button class=\"ds-btn-primary\">Mở Trình Dự báo</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 8px 16px; border: 1px solid transparent; border-radius: 8px; background: var(--primary, #1488db); color: var(--primary-foreground, #ffffff); font-family: 'Geist Variable', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1), transform 100ms ease; } .ds-btn-primary:hover { background: #1176be; } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(20, 136, 219, 0.35); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary action button with 1px hairline border on white surface.",
+      "html": "<button class=\"ds-btn-outline\">Cố vấn Học vụ</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 6px 12px; border: 1px solid var(--border, #e2e8f0); border-radius: 8px; background: var(--card, #ffffff); color: var(--foreground, #090e1a); font-family: 'Geist Variable', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(9, 14, 26, 0.04); transition: background-color 150ms ease, color 150ms ease; } .ds-btn-outline:hover { background: var(--muted, #f1f5f9); color: #1d4ed8; } .ds-btn-outline:focus-visible { outline: none; border-color: var(--ring, #1488db); box-shadow: 0 0 0 3px rgba(20, 136, 219, 0.3); }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge-outline",
+      "description": "Compact pill badge reserved for meaningful academic status signals.",
+      "html": "<span class=\"ds-badge-pass\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 11.08V12a10 10 0 1 1-5.93-9.14\"/><polyline points=\"22 4 12 14.01 9 11.01\"/></svg>Đạt chuẩn</span>",
+      "css": ".ds-badge-pass { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 2px 8px; border: 1px solid #a7f3d0; border-radius: 9999px; background: #ecfdf5; color: #047857; font-family: 'Geist Variable', sans-serif; font-size: 11px; font-weight: 600; white-space: nowrap; }"
+    },
+    {
+      "name": "Surface Card",
+      "kind": "card",
+      "refersTo": "card-surface",
+      "description": "Standard light-canvas container with 1px hairline border and subtle lift.",
+      "html": "<div class=\"ds-card-surface\"><div class=\"ds-card-title\">Điều kiện xét tốt nghiệp</div><p class=\"ds-card-desc\">Tổng hợp 3 tiêu chuẩn bắt buộc: Học vụ, Ngoại ngữ và CTXH.</p></div>",
+      "css": ".ds-card-surface { background: var(--card, #ffffff); color: var(--card-foreground, #090e1a); border: 1px solid var(--border, #e2e8f0); border-radius: 14px; padding: 20px; box-shadow: 0 1px 2px rgba(9, 14, 26, 0.04); font-family: 'Geist Variable', sans-serif; } .ds-card-title { font-size: 16px; font-weight: 700; line-height: 1.375; margin: 0 0 4px 0; } .ds-card-desc { font-size: 12px; color: var(--muted-foreground, #64748b); margin: 0; line-height: 1.5; }"
+    },
+    {
+      "name": "Obsidian KPI Card",
+      "kind": "card",
+      "refersTo": "card-kpi-dark",
+      "description": "High-contrast dark metric card used for top-row academic KPIs.",
+      "html": "<div class=\"ds-kpi-dark\"><div class=\"ds-kpi-label\">GPA TÍCH LŨY</div><div class=\"ds-kpi-value\">3.42 <span class=\"ds-kpi-denom\">/ 4.00</span></div><div class=\"ds-kpi-delta\">+0.12 so với kỳ trước</div></div>",
+      "css": ".ds-kpi-dark { background: #0f172a; color: #ffffff; border: 1px solid #1e293b; border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(9, 14, 26, 0.08); font-family: 'Geist Variable', sans-serif; font-variant-numeric: tabular-nums; } .ds-kpi-label { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #cbd5e1; text-transform: uppercase; } .ds-kpi-value { margin-top: 10px; font-size: 30px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.2; } .ds-kpi-denom { font-size: 14px; font-weight: 500; color: #cbd5e1; } .ds-kpi-delta { margin-top: 12px; font-size: 12px; font-weight: 500; color: #34d399; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Compact 32px form input with crisp stroke and Aurora Blue focus ring.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Tìm mã môn học hoặc sinh viên...\" />",
+      "css": ".ds-input { width: 100%; height: 32px; padding: 4px 10px; border: 1px solid var(--input, #cbd5e1); border-radius: 8px; background: var(--card, #ffffff); color: var(--foreground, #090e1a); font-family: 'Geist Variable', sans-serif; font-size: 14px; outline: none; transition: border-color 150ms ease, box-shadow 150ms ease; } .ds-input::placeholder { color: var(--muted-foreground, #64748b); } .ds-input:focus-visible { border-color: var(--ring, #1488db); box-shadow: 0 0 0 3px rgba(20, 136, 219, 0.25); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Academic Ledger",
+    "overview": "Hệ thống áp dụng ngôn ngữ thị giác gọn gàng, chuẩn xác và đáng tin cậy như một sổ cái học thuật số hóa. Mọi quyết định về khoảng cách, tương phản và màu sắc đều phục vụ mục tiêu giúp sinh viên, giảng viên và quản trị viên quét nhanh số liệu học vụ, nhận diện rủi ro tức thì và điều hướng sâu vào từng tác vụ mà không bị choáng ngợp.\n\nNền tảng sử dụng bố cục phẳng phân tầng bằng viền mảnh 1px trên nền sáng dịu (#f8fafc), kết hợp với các thẻ chỉ số trọng tâm nền tối (#0f172a) để neo thị giác ngay ở đầu trang. Các hiệu ứng trang trí dư thừa như dải gradient cầu vồng, vòng tròn blur nền hay thẻ lồng trong thẻ bị loại bỏ hoàn toàn để giữ độ sắc nét của dữ liệu.",
+    "keyCharacteristics": [
+      "Bề mặt phẳng, phân cấp chủ yếu bằng đường viền mảnh 1px và độ tương phản sáng/tối rõ rệt.",
+      "Mật độ thông tin vừa phải, ưu tiên điều hướng từng phần (progressive disclosure) thay vì dồn toàn bộ chi tiết lên một màn hình.",
+      "Số liệu học vụ luôn căn thẳng cột (tabular-nums) và dùng tiếng Việt thống nhất, giữ nguyên thuật ngữ chuẩn ngành (GPA, TC, CTXH, KLTN, XAI)."
+    ],
+    "rules": [
+      {
+        "name": "The Anchor Contrast Rule",
+        "body": "Nền tối Obsidian KPI chỉ dùng cho các thẻ chỉ số tổng quan trọng tâm ở tầng trên cùng; chữ phụ trên nền tối phải giữ độ sáng từ slate-300 trở lên để đảm bảo tỷ lệ tương phản ≥ 4.5:1.",
+        "section": "colors"
+      },
+      {
+        "name": "The Single Signal Rule",
+        "body": "Màu sắc ngữ nghĩa (xanh lá, vàng hổ phách, đỏ) luôn đi kèm nhãn văn bản hoặc biểu tượng minh họa; không dùng màu đơn lẻ làm tín hiệu duy nhất.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Numerals Rule",
+        "body": "Mọi giá trị GPA, số tín chỉ, phần trăm hoàn thành và ngày CTXH bắt buộc áp dụng tabular-nums để không bị xê dịch chiều ngang khi cập nhật dữ liệu.",
+        "section": "typography"
+      },
+      {
+        "name": "The Hairline-First Rule",
+        "body": "Ưu tiên đường viền 1px (divide-y / divide-x) để chia cột và danh sách bên trong một thẻ thay vì tạo nhiều thẻ con có viền và bóng lồng nhau.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do dùng một thẻ lớn chia cột bằng divide-x / divide-y khi trình bày nhiều trụ cột hoặc danh sách dòng liên quan.",
+      "Do cung cấp đủ 4 trạng thái cho mọi khối dữ liệu API: đang tải (Skeleton), trống, lỗi kèm nút thử lại, và có dữ liệu.",
+      "Do giữ ngôn ngữ nút bấm theo cấu trúc Động từ + Đối tượng cụ thể (ví dụ: Mở Trình Dự báo, Xem khung CTĐT)."
+    ],
+    "donts": [
+      "Don't lồng thẻ có viền và nền riêng vào bên trong một thẻ khác (nested cards).",
+      "Don't dùng dải gradient nhiều màu, vòng tròn ánh sáng blur trang trí hoặc lặp lại khung vuông bọc icon ở mọi dòng.",
+      "Don't gắn quá 1–2 badge trên cùng một hàng danh sách (status-chip soup) hay pha trộn nhãn tiếng Anh và tiếng Việt trên cùng màn hình."
+    ]
+  }
+}
