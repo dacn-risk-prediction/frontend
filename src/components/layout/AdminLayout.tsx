@@ -10,7 +10,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuthUser, useLogout } from "@/features/auth";
-import { useActiveSemester } from "@/hooks/use-active-semester";
+import {
+  formatSemesterLabel,
+  useActiveSemester,
+} from "@/hooks/use-active-semester";
+import { getInitials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   BookOpen,
@@ -34,14 +38,6 @@ interface NavItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
 }
-
-const getInitials = (name: string): string => {
-  const parts = name.trim().split(" ");
-  if (parts.length >= 2) {
-    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-  }
-  return name.slice(0, 2).toUpperCase();
-};
 
 export const AdminLayout = () => {
   const location = useLocation();
@@ -120,25 +116,27 @@ export const AdminLayout = () => {
   );
   const currentTitle = currentNav?.name || "Tổng quan Hệ thống";
 
-  const adminName = user?.name || "Quản trị viên Hệ thống";
+  const adminName = user?.name || "Quản trị viên";
   const adminCode = user?.user_code || "ADMIN";
-  const semesterDisplay = activeSemester?.semester_code || "HK261";
+  const semesterDisplay = formatSemesterLabel(activeSemester?.semester_code);
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900 antialiased">
       {/* Mobile Backdrop */}
       {mobileMenuOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-xs transition-opacity lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-950/50 transition-opacity lg:hidden"
           onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
         />
       )}
 
       {/* Left Sidebar */}
       <aside
+        aria-label="Điều hướng cổng quản trị"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex flex-col border-r border-slate-200 bg-white transition-all duration-200 ease-in-out",
-          mobileMenuOpen ? "translate-x-0 w-64 shadow-xl" : "-translate-x-full",
+          "fixed inset-y-0 left-0 z-50 flex flex-col border-r border-slate-200 bg-sidebar transition-all duration-200 ease-in-out",
+          mobileMenuOpen ? "translate-x-0 w-64 shadow-lg" : "-translate-x-full",
           "lg:translate-x-0",
           sidebarCollapsed ? "lg:w-20" : "lg:w-64",
         )}
@@ -146,26 +144,26 @@ export const AdminLayout = () => {
         {/* Brand Header */}
         <div
           className={cn(
-            "flex h-16 items-center border-b border-slate-100 transition-all duration-200",
-            sidebarCollapsed ? "justify-center px-2" : "justify-between px-6",
+            "flex h-16 items-center border-b border-slate-200 transition-all duration-200",
+            sidebarCollapsed ? "justify-center px-2" : "justify-between px-5",
           )}
         >
           <Link
             to="/admin/dashboard"
-            className="group flex items-center gap-2.5 focus:outline-hidden"
+            className="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => setMobileMenuOpen(false)}
-            title="Aurora Admin Portal"
+            title="Aurora — Quản trị Hệ thống"
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-700 text-white shadow-xs transition-transform group-hover:scale-105">
-              <Sparkles className="h-5 w-5" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs">
+              <Sparkles className="h-5 w-5" aria-hidden="true" />
             </div>
             {!sidebarCollapsed && (
-              <div className="flex flex-col min-w-0 overflow-hidden">
-                <span className="font-heading text-lg font-black tracking-wider text-slate-900 leading-none">
+              <div className="flex min-w-0 flex-col overflow-hidden">
+                <span className="font-heading text-base font-extrabold tracking-wide text-slate-900 leading-none">
                   AURORA
                 </span>
-                <span className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mt-0.5 truncate">
-                  System Administration
+                <span className="mt-0.5 truncate text-xs font-medium text-slate-500">
+                  Quản trị Hệ thống
                 </span>
               </div>
             )}
@@ -175,27 +173,25 @@ export const AdminLayout = () => {
             <Button
               variant="ghost"
               size="icon-sm"
-              className="text-slate-400 hover:text-slate-900 cursor-pointer shrink-0"
+              className="shrink-0 cursor-pointer text-slate-500 hover:bg-slate-200/70 hover:text-slate-900"
               onClick={handleCloseSidebar}
               title="Thu gọn thanh điều hướng"
               aria-label="Thu gọn thanh điều hướng"
             >
-              <ChevronLeft className="h-5 w-5 hidden lg:block" />
+              <ChevronLeft className="hidden h-5 w-5 lg:block" />
               <X className="h-5 w-5 lg:hidden" />
             </Button>
           )}
         </div>
 
         {/* Navigation Items */}
-        <nav className="flex-1 space-y-1.5 p-3 overflow-y-auto overflow-x-hidden">
-          <div
-            className={cn(
-              "text-[10px] font-bold tracking-wider text-slate-400 uppercase transition-all select-none",
-              sidebarCollapsed ? "text-center pb-2 pt-1" : "px-3 pb-2 pt-1",
-            )}
-          >
-            {sidebarCollapsed ? "ADMIN" : "Quản trị Hệ thống"}
-          </div>
+        <nav className="flex-1 space-y-1 overflow-x-hidden overflow-y-auto p-3">
+          {!sidebarCollapsed && (
+            <div className="px-3 pt-1 pb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase select-none">
+              Quản trị
+            </div>
+          )}
+
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive =
@@ -208,31 +204,29 @@ export const AdminLayout = () => {
                 key={item.href}
                 to={item.href}
                 onClick={() => setMobileMenuOpen(false)}
+                aria-current={isActive ? "page" : undefined}
                 title={sidebarCollapsed ? item.name : undefined}
                 className={cn(
-                  "group relative flex items-center rounded-xl text-sm font-medium transition-all duration-150",
+                  "group flex items-center rounded-lg text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   sidebarCollapsed
-                    ? "h-11 w-11 mx-auto justify-center"
-                    : "px-3.5 py-2.5 gap-3",
+                    ? "mx-auto h-11 w-11 justify-center"
+                    : "gap-3 px-3 py-2.5",
                   isActive
-                    ? "bg-blue-50 text-blue-700 font-semibold shadow-2xs"
-                    : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900",
+                    ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
+                    : "font-medium text-slate-600 hover:bg-slate-200/60 hover:text-slate-900",
                 )}
               >
                 <Icon
                   className={cn(
-                    "h-5 w-5 shrink-0 transition-colors",
+                    "h-4.5 w-4.5 shrink-0 transition-colors",
                     isActive
-                      ? "text-blue-700"
+                      ? "text-sidebar-accent-foreground"
                       : "text-slate-500 group-hover:text-slate-800",
                   )}
+                  aria-hidden="true"
                 />
                 {!sidebarCollapsed && (
                   <span className="truncate">{item.name}</span>
-                )}
-
-                {isActive && (
-                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-blue-700" />
                 )}
               </Link>
             );
@@ -242,35 +236,34 @@ export const AdminLayout = () => {
         {/* Sidebar Footer Info */}
         <div
           className={cn(
-            "border-t border-slate-100 transition-all",
-            sidebarCollapsed ? "p-2.5 flex justify-center" : "p-4",
+            "border-t border-slate-200 transition-all",
+            sidebarCollapsed ? "flex justify-center p-2.5" : "p-3.5",
           )}
         >
           <div
             className={cn(
-              "flex items-center rounded-xl bg-slate-50 border border-slate-200/60 transition-all",
+              "flex items-center rounded-lg border border-slate-200 bg-white transition-all",
               sidebarCollapsed
-                ? "h-11 w-11 justify-center"
-                : "gap-3 p-3 w-full",
+                ? "h-10 w-10 justify-center"
+                : "w-full gap-2.5 px-3 py-2.5",
             )}
             title={
-              sidebarCollapsed
-                ? `Học kỳ hiện hành: ${semesterDisplay}`
-                : undefined
+              sidebarCollapsed ? `Học kỳ hiện hành: ${semesterDisplay}` : undefined
             }
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
-              <ShieldCheck className="h-4.5 w-4.5" />
-            </div>
+            <ShieldCheck
+              className="h-4.5 w-4.5 shrink-0 text-primary"
+              aria-hidden="true"
+            />
             {!sidebarCollapsed && (
               <div className="min-w-0 flex-1 overflow-hidden">
-                <p className="truncate text-xs font-semibold text-slate-800">
-                  Học kỳ {semesterDisplay}
+                <p className="truncate text-xs font-semibold text-slate-900 tabular-nums">
+                  {semesterDisplay}
                 </p>
-                <p className="truncate text-[11px] text-slate-500">
+                <p className="truncate text-xs text-slate-500 tabular-nums">
                   {activeSemester?.academic_year
                     ? `Năm học ${activeSemester.academic_year}`
-                    : "Phòng Đào tạo HCMUT"}
+                    : "Phòng Đào tạo"}
                 </p>
               </div>
             )}
@@ -281,70 +274,85 @@ export const AdminLayout = () => {
       {/* Main Content Wrapper */}
       <div
         className={cn(
-          "flex flex-1 flex-col min-w-0 transition-all duration-200 ease-in-out",
+          "flex min-w-0 flex-1 flex-col transition-all duration-200 ease-in-out",
           sidebarCollapsed ? "lg:pl-20" : "lg:pl-64",
         )}
       >
         {/* Top Header */}
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur-md sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
               size="icon-sm"
-              className="text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer"
+              className="cursor-pointer rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900"
               onClick={toggleSidebar}
-              aria-label="Toggle sidebar"
+              aria-label={
+                sidebarCollapsed
+                  ? "Mở rộng thanh điều hướng"
+                  : "Thu gọn thanh điều hướng"
+              }
               title={
                 sidebarCollapsed
-                  ? "Hiện thanh điều hướng"
+                  ? "Mở rộng thanh điều hướng"
                   : "Thu gọn thanh điều hướng"
               }
             >
               <Menu className="h-5 w-5" />
             </Button>
 
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <span className="text-slate-400">Admin</span>
-              <ChevronRight className="h-4 w-4 text-slate-300" />
+            <nav
+              aria-label="Đường dẫn trang"
+              className="flex items-center gap-1.5 text-sm font-medium"
+            >
+              <span className="text-slate-500">Quản trị</span>
+              <ChevronRight
+                className="h-4 w-4 text-slate-400"
+                aria-hidden="true"
+              />
               <span className="font-semibold text-slate-900">
                 {currentTitle}
               </span>
-            </div>
+            </nav>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <DropdownMenu>
-              <DropdownMenuTrigger className="group flex items-center gap-3 rounded-full py-1 pr-2 pl-1 transition-colors hover:bg-slate-100 focus:outline-hidden cursor-pointer">
-                <Avatar className="h-8 w-8 border border-blue-200 ring-1 ring-blue-500/20">
+              <DropdownMenuTrigger className="group flex cursor-pointer items-center gap-2.5 rounded-lg py-1 pr-2 pl-1 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <Avatar className="h-8 w-8 border border-slate-200">
                   <AvatarImage src={user?.avatar_url} alt={adminName} />
-                  <AvatarFallback className="bg-blue-700 text-xs font-semibold text-white">
+                  <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">
                     {getInitials(adminName)}
                   </AvatarFallback>
                 </Avatar>
                 <div className="hidden text-left sm:block">
-                  <p className="text-sm font-semibold leading-tight text-slate-800">
+                  <p className="text-sm font-semibold leading-tight text-slate-900">
                     {adminName}
                   </p>
-                  <p className="text-[11px] leading-tight text-slate-500">
-                    {adminCode} • Administrator
+                  <p className="font-mono text-xs leading-tight text-slate-500 tabular-nums">
+                    {adminCode} · Quản trị viên
                   </p>
                 </div>
-                <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-popup-open:rotate-180 hidden sm:block" />
+                <ChevronDown
+                  className="hidden h-4 w-4 text-slate-400 transition-transform group-data-popup-open:rotate-180 sm:block"
+                  aria-hidden="true"
+                />
               </DropdownMenuTrigger>
 
-              <DropdownMenuContent align="end" className="w-60 mt-1">
+              <DropdownMenuContent align="end" className="mt-1 w-60">
                 <DropdownMenuGroup>
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-semibold text-slate-900 leading-none">
+                      <p className="text-sm font-semibold leading-none text-slate-900">
                         {adminName}
                       </p>
-                      <p className="text-xs text-slate-500 leading-none truncate">
-                        {user?.email || ""}
-                      </p>
+                      {user?.email && (
+                        <p className="truncate text-xs leading-none text-slate-500">
+                          {user.email}
+                        </p>
+                      )}
                       <div className="pt-1">
-                        <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
-                          System Admin
+                        <span className="inline-flex items-center rounded-md bg-sidebar-accent px-2 py-0.5 text-xs font-semibold text-sidebar-accent-foreground">
+                          Quản trị hệ thống
                         </span>
                       </div>
                     </div>

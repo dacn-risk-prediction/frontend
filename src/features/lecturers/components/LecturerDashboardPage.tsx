@@ -13,11 +13,13 @@ import { formatFeatureName } from "@/lib/shap-features";
 import { cn } from "@/lib/utils";
 import type { ClassPrediction } from "@/types";
 import {
+  AlertCircle,
   AlertTriangle,
   ArrowRight,
   BarChart3,
   BookOpen,
   CheckCircle2,
+  RefreshCw,
   ShieldAlert,
   Sparkles,
   TrendingUp,
@@ -73,8 +75,12 @@ export const LecturerDashboardPage = () => {
   const { data: user } = useAuthUser();
   const lecturerId = user?.user_code || user?.id;
 
-  const { data: classes = [], isLoading: isLoadingClasses } =
-    useLecturerCurrentClasses(lecturerId);
+  const {
+    data: classes = [],
+    isLoading: isLoadingClasses,
+    isError: isClassesError,
+    refetch: refetchClasses,
+  } = useLecturerCurrentClasses(lecturerId);
   const { data: activeSemester } = useActiveSemester();
 
   // Fetch enrollments & AI batch predictions across all assigned classes
@@ -290,163 +296,176 @@ export const LecturerDashboardPage = () => {
   );
 
   return (
-    <div className="space-y-6">
-      {/* 1. Header Banner */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-6 pb-10">
+      {/* 1. Header */}
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              Xin chào, {greetingName}!
-            </h1>
-            <Badge className="bg-blue-600 text-white font-medium">
-              Faculty Portal
-            </Badge>
-          </div>
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            Xin chào, {greetingName}
+          </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Theo dõi lớp giảng dạy theo thời gian thực, phân tích rủi ro AI
-            (TreeSHAP) và quản lý can thiệp sớm cho sinh viên.
+            Theo dõi lớp phụ trách, phân tích rủi ro XAI và can thiệp sớm ·{" "}
+            <span className="font-medium text-slate-800">{semesterDisplay}</span>
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Badge
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => navigate("/lecturer/classes")}
+          className="h-9 w-fit cursor-pointer gap-2 border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50"
+        >
+          <BookOpen className="h-4 w-4 text-primary" aria-hidden="true" />
+          <span>Xem lớp phụ trách</span>
+          <ArrowRight className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+        </Button>
+      </header>
+
+      {/* Error Recovery Banner */}
+      {isClassesError && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" aria-hidden="true" />
+            <span>Không thể tải danh sách lớp giảng dạy. Vui lòng thử lại.</span>
+          </div>
+          <Button
             variant="outline"
-            className="border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-2xs"
+            size="sm"
+            onClick={() => void refetchClasses()}
+            className="h-8 w-fit cursor-pointer gap-1.5 border-rose-200 bg-white text-xs font-semibold text-rose-700 hover:bg-rose-100"
           >
-            <span className="mr-1.5 h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            {semesterDisplay} • Đang diễn ra
-          </Badge>
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Thử lại</span>
+          </Button>
         </div>
-      </div>
+      )}
 
       {/* AI Offline Warning */}
       {showAiOfflineBanner && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-900">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-          <p>
+        <div
+          role="status"
+          className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-900"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+          <p className="max-w-[75ch] leading-relaxed">
             Dịch vụ dự báo AI tạm thời chưa phản hồi — các chỉ số rủi ro đang
-            tạm tính theo ngưỡng điểm giữa kỳ. Biểu đồ AI sẽ tự động hiển thị
-            khi mô hình hoạt động trở lại.
+            tạm tính theo ngưỡng điểm giữa kỳ. Biểu đồ XAI sẽ tự động hiển thị
+            khi dịch vụ hoạt động trở lại.
           </p>
         </div>
       )}
 
-      {/* 2. Key Metrics Row */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Card 1: Active Classes */}
-        <Card className="border-slate-200 bg-white shadow-xs">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium tracking-wide text-slate-500 uppercase">
-              Lớp Phụ Trách
-            </CardTitle>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
-              <BookOpen className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
+      {/* 2. Top Row — 4 Authoritative Obsidian KPI Cards (Anchor Contrast Rule) */}
+      <section
+        aria-label="Chỉ số giảng dạy tổng quan"
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+      >
+        {/* KPI 1: Active Classes */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              Lớp phụ trách
+            </span>
+            <BookOpen className="h-4 w-4 text-sky-400" aria-hidden="true" />
+          </div>
+          <div className="mt-2.5 tabular-nums">
             {isLoadingClasses ? (
-              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-9 w-16 bg-slate-800" />
             ) : (
-              <div className="text-2xl font-black text-slate-900">
+              <span className="text-3xl font-extrabold tracking-tight text-white">
                 {classes.length}
-              </div>
+              </span>
             )}
-            <p className="mt-1 text-xs text-slate-500">
-              Phân công trong {semesterDisplay}
-            </p>
-          </CardContent>
-        </Card>
+          </div>
+          <p className="mt-3 text-xs text-slate-300">
+            Phân công trong {semesterDisplay}
+          </p>
+        </div>
 
-        {/* Card 2: Total Students */}
-        <Card className="border-slate-200 bg-white shadow-xs">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium tracking-wide text-slate-500 uppercase">
-              Tổng Sinh Viên
-            </CardTitle>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
-              <Users className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
+        {/* KPI 2: Total Students */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              Tổng sinh viên
+            </span>
+            <Users className="h-4 w-4 text-emerald-400" aria-hidden="true" />
+          </div>
+          <div className="mt-2.5 tabular-nums">
             {isLoadingClasses ? (
-              <Skeleton className="h-8 w-20" />
+              <Skeleton className="h-9 w-20 bg-slate-800" />
             ) : (
-              <div className="text-2xl font-black text-slate-900">
+              <span className="text-3xl font-extrabold tracking-tight text-white">
                 {kpis.totalStudents}
-              </div>
+              </span>
             )}
-            <p className="mt-1 text-xs text-slate-500">
-              {hasAiData
-                ? `${kpis.lowRiskCount} an toàn • ${kpis.mediumRiskCount} cần chú ý`
-                : "Trên tất cả nhóm lớp"}
-            </p>
-          </CardContent>
-        </Card>
+          </div>
+          <p className="mt-3 text-xs text-slate-300 tabular-nums">
+            {hasAiData
+              ? `${kpis.lowRiskCount} an toàn · ${kpis.mediumRiskCount} cần chú ý`
+              : "Trên tất cả nhóm lớp"}
+          </p>
+        </div>
 
-        {/* Card 3: AI High-Risk Students */}
-        <Card className="border-slate-200 bg-white shadow-xs">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium tracking-wide text-slate-500 uppercase">
-              Nguy Cơ Cao (AI)
-            </CardTitle>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
-              <ShieldAlert className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
+        {/* KPI 3: AI High-Risk Students */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              Nguy cơ cao (AI)
+            </span>
+            <ShieldAlert className="h-4 w-4 text-rose-400" aria-hidden="true" />
+          </div>
+          <div className="mt-2.5 flex items-baseline gap-2 tabular-nums">
             {isLoadingEnrollments || isLoadingPredictions ? (
-              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-9 w-16 bg-slate-800" />
             ) : (
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-black text-rose-600">
+              <>
+                <span className="text-3xl font-extrabold tracking-tight text-rose-400">
                   {kpis.highRiskCount}
                 </span>
                 {kpis.highRiskCount > 0 ? (
-                  <Badge
-                    variant="destructive"
-                    className="text-[10px] px-1.5 py-0.2"
-                  >
+                  <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-xs font-semibold text-rose-200">
                     {kpis.highRiskRate.toFixed(1)}% lớp
-                  </Badge>
+                  </span>
                 ) : (
-                  <Badge className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5">
+                  <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs font-semibold text-emerald-200">
                     An toàn
-                  </Badge>
+                  </span>
                 )}
-              </div>
+              </>
             )}
-            <p className="mt-1 text-xs text-slate-500">
-              {hasAiData
-                ? "Phân loại từ XGBoost Class Engine"
-                : "Tạm tính theo điểm GK < 4.0 / Học lại"}
-            </p>
-          </CardContent>
-        </Card>
+          </div>
+          <p className="mt-3 text-xs text-slate-300">
+            {hasAiData
+              ? "Phân loại từ mô hình dự báo AI"
+              : "Tạm tính theo điểm giữa kỳ < 4.0 / Học lại"}
+          </p>
+        </div>
 
-        {/* Card 4: Avg Predicted Performance */}
-        <Card className="border-slate-200 bg-white shadow-xs">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium tracking-wide text-slate-500 uppercase">
-              Điểm TB Dự Kiến
-            </CardTitle>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700">
-              <TrendingUp className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
+        {/* KPI 4: Avg Predicted Performance */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              Điểm TB dự kiến
+            </span>
+            <TrendingUp className="h-4 w-4 text-sky-400" aria-hidden="true" />
+          </div>
+          <div className="mt-2.5 tabular-nums">
             {isLoadingEnrollments || isLoadingPredictions ? (
-              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-9 w-16 bg-slate-800" />
             ) : (
-              <div className="text-2xl font-black text-slate-900">
+              <span className="text-3xl font-extrabold tracking-tight text-white">
                 {kpis.avgDisplay}
-              </div>
+              </span>
             )}
-            <p className="mt-1 text-xs text-emerald-600 font-medium">
-              {kpis.avgSublabel}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+          <p className="mt-3 text-xs font-medium text-emerald-300">
+            {kpis.avgSublabel}
+          </p>
+        </div>
+      </section>
 
       {/* 3. AI Analytics Charts Row */}
       {hasAiData && (
@@ -697,41 +716,41 @@ export const LecturerDashboardPage = () => {
           </CardContent>
         </Card>
 
-        {/* Right Column: Early Risk Radar */}
+        {/* Right Column: Cảnh báo rủi ro sớm */}
         <Card className="flex flex-col justify-between border-slate-200 bg-white shadow-xs">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg font-bold text-slate-900">
-                Early Risk Radar
+          <CardHeader className="border-b border-slate-100 pb-3">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-base font-bold text-slate-900">
+                Cảnh báo rủi ro sớm
               </CardTitle>
               <Badge
                 variant={
                   riskRadarStudents.length > 0 ? "destructive" : "outline"
                 }
-                className="text-[11px] font-medium"
+                className="text-xs font-semibold tabular-nums"
               >
-                {riskRadarStudents.length} Cảnh báo
+                {riskRadarStudents.length} cảnh báo
               </Badge>
             </div>
             <CardDescription className="text-xs text-slate-500">
-              Top sinh viên có xác suất rủi ro cao nhất cần ưu tiên can thiệp
+              Sinh viên có xác suất rủi ro cao nhất cần ưu tiên can thiệp
             </CardDescription>
           </CardHeader>
 
-          <CardContent className="space-y-3 pt-1 flex-1">
+          <CardContent className="flex-1 divide-y divide-slate-100 p-0">
             {isLoadingEnrollments || isLoadingPredictions ? (
-              <div className="space-y-2">
+              <div className="space-y-2 p-4">
                 {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-16 w-full" />
+                  <Skeleton key={i} className="h-14 w-full rounded-lg" />
                 ))}
               </div>
             ) : riskRadarStudents.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-500 flex flex-col items-center gap-2">
-                <CheckCircle2 className="h-8 w-8 text-emerald-500" />
-                <p className="font-medium text-slate-700">
+              <div className="flex flex-col items-center gap-2 px-4 py-8 text-center text-xs text-slate-500">
+                <CheckCircle2 className="h-7 w-7 text-emerald-500" aria-hidden="true" />
+                <p className="font-semibold text-slate-800">
                   Các lớp đang duy trì phong độ tốt
                 </p>
-                <p className="text-[11px] text-slate-400 max-w-xs">
+                <p className="max-w-xs text-xs text-slate-500">
                   Chưa phát hiện sinh viên nào có nguy cơ rớt môn cao trong các
                   lớp phụ trách.
                 </p>
@@ -746,15 +765,15 @@ export const LecturerDashboardPage = () => {
                       `/lecturer/alerts?student=${item.studentId}&course=${item.courseCode}`,
                     )
                   }
-                  className="w-full text-left rounded-lg border border-slate-100 bg-slate-50/70 p-3 transition-colors hover:border-blue-200 hover:bg-blue-50/30 cursor-pointer"
+                  className="w-full cursor-pointer px-5 py-3.5 text-left transition-colors hover:bg-slate-50"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-900 truncate">
+                      <p className="truncate text-sm font-semibold text-slate-900">
                         {item.studentName}
                       </p>
-                      <p className="font-mono text-[10px] text-slate-500">
-                        MSSV: {item.studentId} • {item.courseCode}
+                      <p className="font-mono text-xs text-slate-500 tabular-nums">
+                        MSSV: {item.studentId} · {item.courseCode}
                       </p>
                     </div>
                     <Badge
@@ -762,16 +781,16 @@ export const LecturerDashboardPage = () => {
                         item.riskLevel === "HIGH" ? "destructive" : "outline"
                       }
                       className={cn(
-                        "text-[10px] px-1.5 py-0 shrink-0 font-bold",
+                        "shrink-0 px-2 py-0 text-xs font-semibold tabular-nums",
                         item.riskLevel === "MEDIUM" &&
-                          "border-amber-300 bg-amber-50 text-amber-700",
+                          "border-amber-300 bg-amber-50 text-amber-800",
                       )}
                     >
                       {Math.round(item.failProbability * 100)}% rớt
                     </Badge>
                   </div>
-                  <p className="mt-1.5 text-[11px] text-rose-600 font-medium truncate">
-                    {item.isAi ? "SHAP chính: " : ""}
+                  <p className="mt-1 truncate text-xs font-medium text-rose-700">
+                    {item.isAi ? "Yếu tố chính: " : ""}
                     {item.reason}
                   </p>
                 </button>
@@ -779,13 +798,13 @@ export const LecturerDashboardPage = () => {
             )}
           </CardContent>
 
-          <div className="border-t border-slate-100 p-4 pt-3">
+          <div className="border-t border-slate-100 p-4">
             <Button
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs cursor-pointer"
+              className="h-9 w-full cursor-pointer bg-primary text-xs font-semibold text-primary-foreground hover:bg-brand-blue-hover"
               onClick={() => navigate("/lecturer/alerts")}
             >
-              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-              Mở Trung tâm Cố vấn &amp; Can thiệp
+              <Sparkles className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+              Mở Cố vấn &amp; Can thiệp
             </Button>
           </div>
         </Card>

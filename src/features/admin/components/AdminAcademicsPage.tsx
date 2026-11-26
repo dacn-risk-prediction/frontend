@@ -10,20 +10,23 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { extractApiError } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { AcademicClass, Course } from "@/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  AlertCircle,
   BookOpen,
   GraduationCap,
   Layers,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Trash2,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -50,20 +53,6 @@ import {
 
 type AcademicsTab = "courses" | "classes" | "curriculums";
 
-function extractApiError(err: unknown, fallback: string): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    typeof (err as { response?: { data?: { detail?: unknown } } }).response
-      ?.data?.detail === "string"
-  ) {
-    return (err as { response: { data: { detail: string } } }).response.data
-      .detail;
-  }
-  return fallback;
-}
-
 export const AdminAcademicsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
@@ -77,16 +66,29 @@ export const AdminAcademicsPage = () => {
 
   // Full catalog query kept independent from Tab 1's courseSearch so Tabs 2 & 3 never lose names/options
   const { data: allCourses = [] } = useAdminCourses();
-  const { data: courses = [], isLoading: isLoadingCourses } =
-    useAdminCourses(courseSearch);
+  const {
+    data: courses = [],
+    isLoading: isLoadingCourses,
+    isError: isCoursesError,
+    refetch: refetchCourses,
+  } = useAdminCourses(courseSearch);
   const { data: semesters = [] } = useAdminSemesters();
   const { data: lecturers = [] } = useAdminLecturers();
-  const { data: classes = [], isLoading: isLoadingClasses } = useAdminClasses({
+  const {
+    data: classes = [],
+    isLoading: isLoadingClasses,
+    isError: isClassesError,
+    refetch: refetchClasses,
+  } = useAdminClasses({
     semester_code: classSemester || undefined,
     search: classSearch || undefined,
   });
-  const { data: curriculums = [], isLoading: isLoadingCurriculums } =
-    useAdminCurriculums();
+  const {
+    data: curriculums = [],
+    isLoading: isLoadingCurriculums,
+    isError: isCurriculumsError,
+    refetch: refetchCurriculums,
+  } = useAdminCurriculums();
 
   const effectiveCurriculumId =
     selectedCurriculumId || curriculums[0]?.curriculum_id || "";
@@ -109,6 +111,20 @@ export const AdminAcademicsPage = () => {
   const [classModal, setClassModal] = useState<"create" | "edit" | null>(null);
   const [editingClass, setEditingClass] = useState<AcademicClass | null>(null);
   const [deletingClass, setDeletingClass] = useState<AcademicClass | null>(null);
+
+  useEffect(() => {
+    if (!courseModal && !deletingCourse && !classModal && !deletingClass) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setCourseModal(null);
+        setDeletingCourse(null);
+        setClassModal(null);
+        setDeletingClass(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [courseModal, deletingCourse, classModal, deletingClass]);
 
   const courseForm = useForm<CourseFormValues>({
     resolver: zodResolver(courseFormSchema),
@@ -278,7 +294,32 @@ export const AdminAcademicsPage = () => {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
+      {(isCoursesError || isClassesError || isCurriculumsError) && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" aria-hidden="true" />
+            <span>Không thể tải đầy đủ dữ liệu danh mục học vụ. Vui lòng thử lại.</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (isCoursesError) void refetchCourses();
+              if (isClassesError) void refetchClasses();
+              if (isCurriculumsError) void refetchCurriculums();
+            }}
+            className="h-8 w-fit cursor-pointer gap-1.5 border-rose-200 bg-white text-xs font-semibold text-rose-700 hover:bg-rose-100"
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Thử lại</span>
+          </Button>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2 tabular-nums">
         {(
           [
             { id: "courses", label: `Môn học (${courses.length})`, icon: BookOpen },
@@ -685,8 +726,12 @@ export const AdminAcademicsPage = () => {
 
       {/* Course Create / Edit Modal */}
       {courseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+        >
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-base font-bold text-slate-900">
                 {courseModal === "create"
@@ -772,8 +817,12 @@ export const AdminAcademicsPage = () => {
 
       {/* Class Create / Edit Modal */}
       {classModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+        >
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-base font-bold text-slate-900">
                 {classModal === "create"
@@ -894,8 +943,12 @@ export const AdminAcademicsPage = () => {
 
       {/* Delete Course / Class Modals */}
       {deletingCourse && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+        >
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
             <h2 className="text-base font-bold text-slate-900">Xác nhận xóa môn học</h2>
             <p className="mt-2 text-xs text-slate-600">
               Bạn muốn xóa môn{" "}
@@ -936,8 +989,12 @@ export const AdminAcademicsPage = () => {
       )}
 
       {deletingClass && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+        >
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
             <h2 className="text-base font-bold text-slate-900">
               Xác nhận xóa lớp học phần
             </h2>

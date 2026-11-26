@@ -134,8 +134,26 @@
   }
   body {
     @apply bg-background text-foreground;
+    caret-color: var(--primary);
   }
   html {
     @apply font-sans;
+  }
+  ::selection {
+    background-color: var(--secondary);
+    color: var(--secondary-foreground);
+  }
+  a {
+    text-underline-offset: 3px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.08s !important;
+    animation-iteration-count: 1 !important;
   }
 }

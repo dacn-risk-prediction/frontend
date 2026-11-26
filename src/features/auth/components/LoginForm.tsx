@@ -1,15 +1,31 @@
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useNavigate } from "react-router-dom"
-import { toast } from "sonner"
-import { BarChart3, ShieldCheck, ArrowRight, Loader2 } from "lucide-react"
-import { useLogin, getCurrentUser } from "../api/auth-api"
-import { ROLE_DEFAULT_REDIRECT } from "../types"
-import { loginSchema, type LoginFormValues } from "../schemas/login-schema"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { extractApiError } from "@/lib/format";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Loader2,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
+import { useForm } from "react-hook-form";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { getCurrentUser, useLogin } from "../api/auth-api";
+import { loginSchema, type LoginFormValues } from "../schemas/login-schema";
+import { ROLE_DEFAULT_REDIRECT } from "../types";
+
+const PLATFORM_HIGHLIGHTS = [
+  "Theo dõi 3 trụ cột tốt nghiệp theo thời gian thực (Học vụ, Ngoại ngữ, CTXH).",
+  "Dự báo rủi ro học phần minh bạch bằng Explainable AI (XAI) & gợi ý cải thiện.",
+  "Kết nối trực tiếp giữa sinh viên và giảng viên cố vấn trên cùng hồ sơ học tập.",
+];
 
 export const LoginForm = () => {
-  const navigate = useNavigate()
-  const loginMutation = useLogin()
+  const navigate = useNavigate();
+  const loginMutation = useLogin();
 
   const {
     register,
@@ -18,194 +34,204 @@ export const LoginForm = () => {
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
-  })
+  });
 
   const onSubmit = async (values: LoginFormValues) => {
     try {
-      await loginMutation.mutateAsync(values)
-      const user = await getCurrentUser()
-      toast.success(`Welcome back, ${user.full_name}!`)
-      navigate(ROLE_DEFAULT_REDIRECT[user.role], { replace: true })
+      await loginMutation.mutateAsync(values);
+      const user = await getCurrentUser();
+      toast.success(`Chào mừng trở lại, ${user.full_name}!`);
+      navigate(ROLE_DEFAULT_REDIRECT[user.role], { replace: true });
     } catch (err: unknown) {
-      if (typeof err === "object" && err !== null && "response" in err) {
-        const response = (err as { response?: { data?: { detail?: string | { msg?: string }[] } } }).response
-        const detail = response?.data?.detail
-        if (typeof detail === "string") {
-          toast.error(detail)
-          return
-        }
-        if (Array.isArray(detail) && detail[0]?.msg) {
-          toast.error(detail[0].msg)
-          return
-        }
-      }
-      toast.error("Invalid credentials or inactive account.")
+      toast.error(
+        extractApiError(
+          err,
+          "Thông tin đăng nhập chưa đúng hoặc tài khoản chưa được kích hoạt.",
+        ),
+      );
     }
-  }
+  };
 
-  const handleForgotPassword = (e: React.MouseEvent) => {
-    e.preventDefault()
-    toast.info("Please contact your IT administrator to reset your password.")
-  }
+  const handleForgotPassword = () => {
+    toast.info(
+      "Vui lòng liên hệ Phòng Đào tạo hoặc quản trị viên hệ thống để được cấp lại mật khẩu.",
+    );
+  };
 
-  const handleRequestAccount = (e: React.MouseEvent) => {
-    e.preventDefault()
-    toast.info("Please contact your department chair or academic office for account provisioning.")
-  }
+  const handleRequestAccount = () => {
+    toast.info(
+      "Tài khoản được cấp đồng bộ theo danh sách Phòng Đào tạo. Liên hệ cố vấn học vụ nếu cần hỗ trợ.",
+    );
+  };
 
   return (
-    <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-brand-dark p-4 sm:p-6 lg:p-10 font-sans antialiased">
-      {/* Ambient background glow adhering to standard scale tokens (h-150, h-175, h-188, w-250) */}
-      <div className="pointer-events-none absolute -top-48 -left-48 h-150 w-150 rounded-full bg-brand-blue/18 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-48 -right-48 h-175 w-175 rounded-full bg-brand-navy/45 blur-3xl" />
-      <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-188 w-250 rounded-full bg-radial from-brand-navy/20 via-transparent to-brand-blue/10 blur-3xl" />
-
-      {/* Main Dual-Panel Auth Container adhering to standard max-w-245 (980px) and rounded-3xl */}
-      <div className="relative z-10 grid w-full max-w-245 grid-cols-1 overflow-hidden rounded-3xl border border-white/10 bg-brand-card-inner/90 shadow-2xl shadow-black/80 backdrop-blur-2xl md:grid-cols-2">
-        
-        {/* Left Column: Light Institutional Showcase Panel */}
-        <div className="flex flex-col justify-between bg-brand-card-light p-8 sm:p-10 lg:p-12 text-neutral-900">
+    <main className="flex min-h-screen w-full items-center justify-center bg-slate-50 p-4 font-sans text-slate-900 antialiased sm:p-6 lg:p-10">
+      <div className="grid w-full max-w-5xl grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs md:grid-cols-12">
+        {/* Left Column: Surface White Institutional Ledger Panel */}
+        <section className="flex flex-col justify-between border-b border-slate-200 bg-white p-7 sm:p-10 md:col-span-6 md:border-r md:border-b-0 lg:p-12">
           <div>
-            {/* Brand Logo Header */}
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-neutral-300/80 shadow-inner">
-                <BarChart3 className="size-5 text-brand-navy" />
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs">
+                <Sparkles className="h-5 w-5" aria-hidden="true" />
               </div>
-              <span className="text-sm font-extrabold tracking-widest text-neutral-800 uppercase">
-                AURORA
-              </span>
+              <div className="flex flex-col">
+                <span className="font-heading text-base font-extrabold tracking-wide text-slate-900 leading-none">
+                  AURORA
+                </span>
+                <span className="mt-0.5 text-xs font-medium text-slate-500">
+                  Cổng Học vụ &amp; Dự báo XAI
+                </span>
+              </div>
             </div>
 
-            {/* Core Value Proposition Copy */}
-            <div className="mt-14 sm:mt-16">
-              <span className="block text-xs font-bold tracking-widest text-neutral-500 uppercase">
-                Academic Intelligence
-              </span>
-              <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-neutral-900 sm:text-4xl lg:text-5xl leading-tight">
-                See risk sooner.<br />
-                Support students<br />
-                better.
+            <div className="mt-10 sm:mt-12">
+              <h1 className="font-heading text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl leading-snug">
+                Nhận diện rủi ro sớm. Đồng hành học tập minh bạch.
               </h1>
-              <p className="mt-5 text-sm sm:text-base leading-relaxed text-neutral-600 max-w-sm">
-                An explainable AI workspace for university teams to identify academic risk and make more informed interventions.
+              <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-600">
+                Hệ thống theo dõi tiến độ học vụ, giải thích dự báo kết quả học
+                phần bằng XAI và hỗ trợ cố vấn trực tuyến dành cho sinh viên,
+                giảng viên và quản trị đào tạo.
               </p>
+
+              <ul className="mt-8 divide-y divide-slate-100 border-y border-slate-100">
+                {PLATFORM_HIGHLIGHTS.map((item) => (
+                  <li
+                    key={item}
+                    className="flex items-start gap-2.5 py-3 text-sm leading-relaxed text-slate-700"
+                  >
+                    <CheckCircle2
+                      className="mt-0.5 h-4 w-4 shrink-0 text-primary"
+                      aria-hidden="true"
+                    />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
 
-          {/* Responsible AI Trust Badge */}
-          <div className="mt-12 flex items-center gap-2.5 pt-4 text-xs font-medium text-neutral-500">
-            <ShieldCheck className="size-4 shrink-0 text-brand-blue" />
-            <span>Built for responsible, transparent decision-making</span>
+          <div className="mt-8 flex items-center gap-2 text-xs font-medium text-slate-500">
+            <ShieldCheck
+              className="h-4 w-4 shrink-0 text-primary"
+              aria-hidden="true"
+            />
+            <span>
+              Mọi dự báo AI đều đi kèm giải thích dữ liệu thật và không thay thế
+              quyết định chuyên môn của cố vấn.
+            </span>
           </div>
-        </div>
+        </section>
 
-        {/* Right Column: Dark Login Portal Panel */}
-        <div className="flex flex-col justify-between bg-brand-card-dark p-8 sm:p-10 lg:p-12 text-white">
+        {/* Right Column: Obsidian Anchor Sign-In Panel */}
+        <section className="flex flex-col justify-between bg-slate-900 p-7 text-white sm:p-10 md:col-span-6 lg:p-12">
           <div>
-            {/* Header */}
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-                Welcome back
-              </h2>
-              <p className="mt-2 text-xs sm:text-sm text-neutral-400">
-                Sign in to the University Academic Risk & XAI Portal.
-              </p>
-            </div>
+            <h2 className="font-heading text-2xl font-bold tracking-tight text-white">
+              Đăng nhập hệ thống
+            </h2>
+            <p className="mt-1.5 text-sm text-slate-300">
+              Sử dụng tài khoản email nhà trường đã được cấp để truy cập cổng
+              thông tin.
+            </p>
 
-            {/* Sign-in Form */}
-            <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5">
-              {/* University Email */}
-              <div className="space-y-2">
-                <label
+            <form
+              onSubmit={handleSubmit(onSubmit)}
+              className="mt-8 space-y-5"
+              noValidate
+            >
+              <div className="space-y-1.5">
+                <Label
                   htmlFor="email"
-                  className="block text-xs font-medium text-neutral-300"
+                  className="text-xs font-semibold text-slate-200"
                 >
-                  University email
-                </label>
-                <input
+                  Email nhà trường
+                </Label>
+                <Input
                   id="email"
                   type="email"
                   autoComplete="email"
-                  placeholder="you@university.edu"
+                  placeholder="ten.nguoidung@hcmut.edu.vn"
+                  aria-invalid={Boolean(errors.email)}
                   {...register("email")}
-                  className="w-full rounded-lg border border-neutral-800 bg-brand-input-dark px-3.5 py-2.5 text-sm text-white placeholder-neutral-500 outline-none transition-all duration-150 focus:border-brand-blue focus:ring-1 focus:ring-brand-blue"
+                  className="h-10 border-slate-700 bg-slate-800/90 px-3 text-sm text-white placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/40"
                 />
                 {errors.email && (
-                  <p className="text-xs text-red-400">{errors.email.message}</p>
+                  <p role="alert" className="text-xs text-rose-300">
+                    {errors.email.message}
+                  </p>
                 )}
               </div>
 
-              {/* Password with Forgot Password */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <Label
                     htmlFor="password"
-                    className="block text-xs font-medium text-neutral-300"
+                    className="text-xs font-semibold text-slate-200"
                   >
-                    Password
-                  </label>
+                    Mật khẩu
+                  </Label>
                   <button
                     type="button"
                     onClick={handleForgotPassword}
-                    className="text-xs text-neutral-400 hover:text-brand-blue transition-colors"
+                    className="cursor-pointer text-xs font-medium text-sky-300 underline-offset-4 transition-colors hover:text-white hover:underline"
                   >
-                    Forgot password?
+                    Quên mật khẩu?
                   </button>
                 </div>
-                <input
+                <Input
                   id="password"
                   type="password"
                   autoComplete="current-password"
-                  placeholder="••••••••"
+                  placeholder="Nhập mật khẩu của bạn"
+                  aria-invalid={Boolean(errors.password)}
                   {...register("password")}
-                  className="w-full rounded-lg border border-neutral-800 bg-brand-input-dark px-3.5 py-2.5 text-sm text-white placeholder-neutral-500 outline-none transition-all duration-150 focus:border-brand-blue focus:ring-1 focus:ring-brand-blue"
+                  className="h-10 border-slate-700 bg-slate-800/90 px-3 text-sm text-white placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/40"
                 />
                 {errors.password && (
-                  <p className="text-xs text-red-400">{errors.password.message}</p>
+                  <p role="alert" className="text-xs text-rose-300">
+                    {errors.password.message}
+                  </p>
                 )}
               </div>
 
-              {/* Sign in Button */}
-              <button
+              <Button
                 type="submit"
                 disabled={isSubmitting || loginMutation.isPending}
-                className="group relative flex w-full items-center justify-center gap-2 rounded-lg bg-brand-blue px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-blue/25 transition-all duration-200 hover:bg-brand-blue-hover active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="h-10 w-full cursor-pointer gap-2 rounded-lg bg-primary text-sm font-semibold text-primary-foreground hover:bg-brand-blue-hover"
               >
                 {loginMutation.isPending ? (
                   <>
-                    <Loader2 className="size-4 animate-spin" />
-                    <span>Signing in...</span>
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    <span>Đang đăng nhập...</span>
                   </>
                 ) : (
                   <>
-                    <span>Sign in</span>
-                    <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+                    <span>Đăng nhập</span>
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
                   </>
                 )}
-              </button>
+              </Button>
             </form>
           </div>
 
-          {/* Footer Info & Disclaimers */}
-          <div className="mt-8 space-y-4 pt-4 text-center">
-            <p className="text-xs text-neutral-400">
-              Need access?{" "}
+          <div className="mt-10 space-y-3 border-t border-slate-800 pt-5 text-center">
+            <p className="text-xs text-slate-300">
+              Chưa có tài khoản truy cập?{" "}
               <button
                 type="button"
                 onClick={handleRequestAccount}
-                className="font-medium text-brand-blue underline underline-offset-4 hover:text-white transition-colors cursor-pointer"
+                className="cursor-pointer font-semibold text-sky-300 underline-offset-4 transition-colors hover:text-white hover:underline"
               >
-                Request an account
+                Xem hướng dẫn cấp tài khoản
               </button>
             </p>
-
-            <p className="text-xs leading-relaxed text-neutral-500 max-w-xs mx-auto border-t border-neutral-800/80 pt-4">
-              By continuing, you agree to your institution's acceptable use and privacy policies.
+            <p className="text-xs leading-relaxed text-slate-400">
+              Bằng việc đăng nhập, bạn đồng ý tuân thủ quy định bảo mật dữ liệu
+              học vụ của nhà trường.
             </p>
           </div>
-        </div>
-
+        </section>
       </div>
-    </div>
-  )
-}
+    </main>
+  );
+};

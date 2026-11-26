@@ -12,6 +12,7 @@ import { useActiveSemester } from "@/hooks/use-active-semester";
 import { cn } from "@/lib/utils";
 import {
   Activity,
+  AlertCircle,
   AlertTriangle,
   ArrowRight,
   BookOpen,
@@ -65,7 +66,12 @@ function flattenMetrics(metrics: Record<string, unknown>): Array<{ key: string; 
 export const AdminDashboardPage = () => {
   const navigate = useNavigate();
   const { data: activeSemester } = useActiveSemester();
-  const { data: stats, isLoading: isLoadingStats } = useAdminSystemStats();
+  const {
+    data: stats,
+    isLoading: isLoadingStats,
+    isError: isStatsError,
+    refetch: refetchStats,
+  } = useAdminSystemStats();
   const {
     data: modelHealth,
     isLoading: isLoadingHealth,
@@ -101,13 +107,14 @@ export const AdminDashboardPage = () => {
   return (
     <div className="space-y-6 pb-10">
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Trung tâm Quản trị Hệ thống
+            Tổng quan quản trị hệ thống
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Theo dõi tổng quan người dùng, danh mục học vụ, học kỳ hiện hành và trạng thái AI Model Service.
+            Theo dõi số liệu tài khoản, danh mục học vụ, học kỳ hiện hành và
+            trạng thái dịch vụ dự báo AI.
           </p>
         </div>
 
@@ -116,99 +123,114 @@ export const AdminDashboardPage = () => {
             variant="outline"
             size="sm"
             onClick={() => navigate("/admin/users")}
-            className="cursor-pointer gap-1.5 text-xs"
+            className="h-9 cursor-pointer gap-1.5 border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
-            <Users className="h-3.5 w-3.5 text-blue-600" />
-            <span>Quản lý Tài khoản</span>
+            <Users className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+            <span>Quản lý tài khoản</span>
           </Button>
           <Button
             size="sm"
             onClick={() => navigate("/admin/semesters")}
-            className="cursor-pointer gap-1.5 bg-blue-600 text-xs text-white hover:bg-blue-700"
+            className="h-9 cursor-pointer gap-1.5 bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-brand-blue-hover"
           >
-            <Calendar className="h-3.5 w-3.5" />
-            <span>Cấu hình Học kỳ</span>
+            <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Cấu hình học kỳ</span>
           </Button>
         </div>
-      </div>
+      </header>
 
-      {/* 4 Dark KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* KPI 1: Total Profiles */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-md">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">
-                Tổng Hồ sơ Người dùng
-              </p>
-              <div className="mt-2">
-                {isLoadingStats ? (
-                  <Skeleton className="h-9 w-20 bg-slate-800" />
-                ) : (
-                  <span className="text-3xl font-extrabold tracking-tight text-white">
-                    {totalAccounts.toLocaleString("vi-VN")}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-800 text-blue-400">
-              <Users className="h-5 w-5" />
-            </div>
+      {/* Error Recovery Banner */}
+      {isStatsError && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" aria-hidden="true" />
+            <span>Không thể tải số liệu thống kê hệ thống. Vui lòng thử lại.</span>
           </div>
-          <p className="mt-3 text-xs text-slate-400">
-            {studentsCount.toLocaleString("vi-VN")} SV • {lecturersCount.toLocaleString("vi-VN")} GV • {adminsCount.toLocaleString("vi-VN")} Admin
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refetchStats()}
+            className="h-8 w-fit cursor-pointer gap-1.5 border-rose-200 bg-white text-xs font-semibold text-rose-700 hover:bg-rose-100"
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Thử lại</span>
+          </Button>
+        </div>
+      )}
+
+      {/* 4 Authoritative Obsidian KPI Cards (Anchor Contrast Rule: slate-300+) */}
+      <section
+        aria-label="Chỉ số hệ thống tổng quan"
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+      >
+        {/* KPI 1: Total Profiles */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              Tổng hồ sơ người dùng
+            </span>
+            <Users className="h-4 w-4 text-sky-400" aria-hidden="true" />
+          </div>
+          <div className="mt-2.5 tabular-nums">
+            {isLoadingStats ? (
+              <Skeleton className="h-9 w-20 bg-slate-800" />
+            ) : (
+              <span className="text-3xl font-extrabold tracking-tight text-white">
+                {totalAccounts.toLocaleString("vi-VN")}
+              </span>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-slate-300 tabular-nums">
+            {studentsCount.toLocaleString("vi-VN")} SV ·{" "}
+            {lecturersCount.toLocaleString("vi-VN")} GV ·{" "}
+            {adminsCount.toLocaleString("vi-VN")} Quản trị
           </p>
         </div>
 
         {/* KPI 2: Courses & Active Classes */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-md">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">
-                Môn học &amp; Lớp mở
-              </p>
-              <div className="mt-2 flex items-baseline gap-2">
-                {isLoadingStats ? (
-                  <Skeleton className="h-9 w-24 bg-slate-800" />
-                ) : (
-                  <>
-                    <span className="text-3xl font-extrabold tracking-tight text-white">
-                      {coursesCount.toLocaleString("vi-VN")}
-                    </span>
-                    <span className="text-xs font-semibold text-blue-400">
-                      / {activeClassesCount.toLocaleString("vi-VN")} lớp kỳ này
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-800 text-emerald-400">
-              <BookOpen className="h-5 w-5" />
-            </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              Môn học &amp; Lớp mở
+            </span>
+            <BookOpen className="h-4 w-4 text-emerald-400" aria-hidden="true" />
           </div>
-          <p className="mt-3 text-xs text-slate-400">
-            Đồng bộ danh mục học phần &amp; phân công giảng dạy
+          <div className="mt-2.5 flex items-baseline gap-2 tabular-nums">
+            {isLoadingStats ? (
+              <Skeleton className="h-9 w-24 bg-slate-800" />
+            ) : (
+              <>
+                <span className="text-3xl font-extrabold tracking-tight text-white">
+                  {coursesCount.toLocaleString("vi-VN")}
+                </span>
+                <span className="text-xs font-semibold text-sky-300">
+                  / {activeClassesCount.toLocaleString("vi-VN")} lớp kỳ này
+                </span>
+              </>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-slate-300">
+            Danh mục học phần và phân công giảng dạy
           </p>
         </div>
 
         {/* KPI 3: Active Semester */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-md">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">
-                Học kỳ Hiện hành
-              </p>
-              <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-3xl font-extrabold tracking-tight text-emerald-400">
-                  {activeSemester?.semester_code || stats?.active_semester_code || "—"}
-                </span>
-              </div>
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-800 text-amber-400">
-              <Calendar className="h-5 w-5" />
-            </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              Học kỳ hiện hành
+            </span>
+            <Calendar className="h-4 w-4 text-amber-400" aria-hidden="true" />
           </div>
-          <p className="mt-3 truncate text-xs text-slate-400">
+          <div className="mt-2.5 tabular-nums">
+            <span className="font-mono text-3xl font-extrabold tracking-tight text-emerald-400">
+              {activeSemester?.semester_code || stats?.active_semester_code || "—"}
+            </span>
+          </div>
+          <p className="mt-3 truncate text-xs text-slate-300 tabular-nums">
             {activeSemester?.withdraw_deadline
               ? `Hạn rút môn: ${new Date(activeSemester.withdraw_deadline).toLocaleDateString("vi-VN")}`
               : `${semestersCount} học kỳ đã cấu hình`}
@@ -216,44 +238,40 @@ export const AdminDashboardPage = () => {
         </div>
 
         {/* KPI 4: Curriculums */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-md">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">
-                Khung Chương trình ĐT
-              </p>
-              <div className="mt-2">
-                {isLoadingStats ? (
-                  <Skeleton className="h-9 w-16 bg-slate-800" />
-                ) : (
-                  <span className="text-3xl font-extrabold tracking-tight text-white">
-                    {curriculumsCount}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-800 text-indigo-400">
-              <GraduationCap className="h-5 w-5" />
-            </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              Khung chương trình ĐT
+            </span>
+            <GraduationCap className="h-4 w-4 text-sky-400" aria-hidden="true" />
           </div>
-          <p className="mt-3 text-xs text-slate-400">
-            Khối kiến thức &amp; quy định tiên quyết theo khóa
+          <div className="mt-2.5 tabular-nums">
+            {isLoadingStats ? (
+              <Skeleton className="h-9 w-16 bg-slate-800" />
+            ) : (
+              <span className="text-3xl font-extrabold tracking-tight text-white">
+                {curriculumsCount}
+              </span>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-slate-300">
+            Khối kiến thức và điều kiện tiên quyết theo khóa
           </p>
         </div>
-      </div>
+      </section>
 
-      {/* Main Content: AI Model Health + Role Distribution */}
+      {/* Main Content: AI Service Health + Role Distribution */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* AI Model Service Health Card (7 cols) */}
+        {/* AI Model Service Health Card (7 cols, Hairline-First flattened) */}
         <Card className="border-slate-200 bg-white shadow-xs lg:col-span-7">
           <CardHeader className="flex flex-row items-start justify-between gap-3 border-b border-slate-100 pb-4">
             <div>
               <CardTitle className="flex items-center gap-2 text-base font-bold text-slate-900">
-                <Cpu className="h-4.5 w-4.5 text-blue-600" />
-                Trạng thái AI Model Service (:8001)
+                <Cpu className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+                Trạng thái dịch vụ dự báo AI
               </CardTitle>
               <CardDescription className="text-xs text-slate-500">
-                Giám sát kết nối tới dịch vụ dự báo rủi ro học tập XGBoost + TreeSHAP + Counterfactual
+                Giám sát kết nối tới mô hình dự báo rủi ro học tập và giải thích XAI
               </CardDescription>
             </div>
             <Button
@@ -261,41 +279,51 @@ export const AdminDashboardPage = () => {
               size="sm"
               disabled={isFetchingHealth}
               onClick={() => void refetchHealth()}
-              className="cursor-pointer gap-1.5 text-xs"
+              className="h-8 cursor-pointer gap-1.5 text-xs"
             >
               <RefreshCw
                 className={cn("h-3.5 w-3.5", isFetchingHealth && "animate-spin")}
+                aria-hidden="true"
               />
               <span>Kiểm tra lại</span>
             </Button>
           </CardHeader>
 
-          <CardContent className="pt-4 space-y-4">
+          <CardContent className="divide-y divide-slate-100 p-0">
             {isLoadingHealth ? (
-              <div className="space-y-3">
-                <Skeleton className="h-14 w-full rounded-xl" />
-                <Skeleton className="h-24 w-full rounded-xl" />
+              <div className="space-y-3 p-5">
+                <Skeleton className="h-14 w-full rounded-lg" />
+                <Skeleton className="h-20 w-full rounded-lg" />
               </div>
             ) : isModelOnline && modelHealth ? (
               <>
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600 text-white">
-                      <CheckCircle2 className="h-5 w-5" />
-                    </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 bg-emerald-50/40 px-5 py-4">
+                  <div className="flex items-start gap-2.5">
+                    <CheckCircle2
+                      className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600"
+                      aria-hidden="true"
+                    />
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-bold text-emerald-950">
-                          {modelHealth.service || "Model Serving Service"}
+                          Dịch vụ dự báo AI đang hoạt động
                         </span>
-                        <Badge className="bg-emerald-600 text-[10px] font-bold text-white">
-                          ONLINE • {modelHealth.model_status}
+                        <Badge
+                          variant="outline"
+                          className="border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700"
+                        >
+                          Sẵn sàng
                         </Badge>
                       </div>
-                      <p className="text-xs text-emerald-800 mt-0.5">
+                      <p className="mt-0.5 text-xs text-emerald-900 tabular-nums">
                         Ngưỡng cảnh báo rớt môn:{" "}
-                        <strong>{(modelHealth.fail_threshold * 100).toFixed(1)}%</strong> • Bộ nhớ
-                        đệm: <strong>{modelHealth.total_records_cached.toLocaleString("vi-VN")}</strong>{" "}
+                        <strong>
+                          {(modelHealth.fail_threshold * 100).toFixed(1)}%
+                        </strong>{" "}
+                        · Bộ nhớ đệm:{" "}
+                        <strong>
+                          {modelHealth.total_records_cached.toLocaleString("vi-VN")}
+                        </strong>{" "}
                         bản ghi
                       </p>
                     </div>
@@ -303,51 +331,52 @@ export const AdminDashboardPage = () => {
                 </div>
 
                 {metricRows.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                      Chỉ số Mô hình (Model Metrics)
+                  <div className="p-5">
+                    <p className="mb-3 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                      Chỉ số đánh giá mô hình
                     </p>
-                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                    <dl className="grid grid-cols-2 divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 sm:grid-cols-4 sm:divide-x sm:divide-y-0">
                       {metricRows.map((row) => (
-                        <div
-                          key={row.key}
-                          className="rounded-lg border border-slate-100 bg-slate-50 p-2.5"
-                        >
-                          <p
-                            className="truncate text-[10px] font-semibold uppercase text-slate-500"
+                        <div key={row.key} className="bg-slate-50/50 p-3">
+                          <dt
+                            className="truncate text-xs font-medium text-slate-500"
                             title={row.key}
                           >
                             {row.key}
-                          </p>
-                          <p className="mt-0.5 font-mono text-sm font-bold text-slate-900">
+                          </dt>
+                          <dd className="mt-1 font-mono text-sm font-bold text-slate-900 tabular-nums">
                             {row.value}
-                          </p>
+                          </dd>
                         </div>
                       ))}
-                    </div>
+                    </dl>
                   </div>
                 )}
               </>
             ) : (
-              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+              <div className="bg-amber-50/50 p-5">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle
+                    className="mt-0.5 h-5 w-5 shrink-0 text-amber-600"
+                    aria-hidden="true"
+                  />
+                  <div className="max-w-[70ch] space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-bold text-amber-950">
-                        AI Model Service hiện không phản hồi (503 / Offline)
+                        Dịch vụ dự báo AI tạm thời ngoại tuyến
                       </span>
                       <Badge
                         variant="outline"
-                        className="border-amber-300 bg-white text-[10px] font-bold text-amber-700"
+                        className="border-amber-300 bg-white text-xs font-semibold text-amber-800"
                       >
-                        OFFLINE
+                        Ngoại tuyến
                       </Badge>
                     </div>
-                    <p className="text-xs text-amber-900 leading-relaxed">
-                      Các chức năng quản trị tài khoản, học kỳ, học vụ và cố vấn vẫn hoạt động bình
-                      thường. Vui lòng kiểm tra tiến trình <code className="font-mono">uvicorn serve:app --port 8001</code>{" "}
-                      trong thư mục <code className="font-mono">model</code> để bật lại dự báo AI &amp; Counterfactual.
+                    <p className="text-xs leading-relaxed text-amber-900">
+                      Các chức năng quản trị tài khoản, học kỳ, danh mục học vụ
+                      và cố vấn vẫn hoạt động bình thường. Hãy khởi động lại
+                      dịch vụ suy luận AI và bấm &ldquo;Kiểm tra lại&rdquo; để
+                      đồng bộ trạng thái.
                     </p>
                   </div>
                 </div>

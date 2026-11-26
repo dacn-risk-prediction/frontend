@@ -1,21 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowDownLeft,
-  ArrowRight,
-  ArrowUpRight,
-  Bell,
-  Calendar,
-  CheckCheck,
-  Clock,
-  ListTodo,
-  MessageSquare,
-  RefreshCw,
-  Sparkles,
-} from "lucide-react";
-import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +21,23 @@ import type {
   AdvisingNotificationItem,
   NotificationDirection,
 } from "@/types";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  AlertCircle,
+  ArrowDownLeft,
+  ArrowRight,
+  ArrowUpRight,
+  Bell,
+  Calendar,
+  CheckCheck,
+  Clock,
+  ListTodo,
+  MessageSquare,
+  RefreshCw,
+} from "lucide-react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 interface NotificationBellProps {
   role: "student" | "lecturer";
@@ -91,6 +92,7 @@ export const NotificationBell = ({
   const {
     data: notificationData,
     isLoading,
+    isError,
     isFetching,
     refetch: refetchNotifications,
   } = useAdvisingNotifications(filter, limit, enabled && isOpen);
@@ -103,9 +105,9 @@ export const NotificationBell = ({
   const receivedCount = notificationData?.received_count ?? 0;
   const sentCount = notificationData?.sent_count ?? 0;
   const allCount = receivedCount + sentCount;
-  const hasMore = Boolean(notificationData?.has_more) && limit < MAX_NOTIFICATION_LIMIT;
+  const hasMore =
+    Boolean(notificationData?.has_more) && limit < MAX_NOTIFICATION_LIMIT;
 
-  // Subtle indicator when user has sent items waiting to be read by recipient
   const hasPendingSent = items.some(
     (item) => item.direction === "sent" && !item.is_read,
   );
@@ -178,31 +180,28 @@ export const NotificationBell = ({
               ? "Có thông báo đã gửi đang chờ xem"
               : "Thông báo cố vấn học vụ"
         }
-        className="relative flex h-9 w-9 items-center justify-center rounded-full text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-hidden cursor-pointer"
+        className="relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <Bell className="h-5 w-5" />
+        <Bell className="h-5 w-5" aria-hidden="true" />
         {effectiveUnreadCount > 0 ? (
-          <span className="absolute -top-0.5 -right-0.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-extrabold text-white ring-2 ring-white shadow-xs">
+          <span className="absolute -top-0.5 -right-0.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-destructive px-1 text-xs font-bold text-white ring-2 ring-white tabular-nums">
             {effectiveUnreadCount > 99 ? "99+" : effectiveUnreadCount}
           </span>
         ) : hasPendingSent ? (
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white" />
+          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary ring-2 ring-white" />
         ) : null}
       </DropdownMenuTrigger>
 
       <DropdownMenuContent
         align="end"
-        className="w-88 sm:w-100 mt-1 p-0 overflow-hidden"
+        className="mt-1 w-88 overflow-hidden p-0 sm:w-100"
       >
         {/* Header */}
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="flex items-center justify-between px-3.5 py-2.5 bg-slate-50/90 border-b border-slate-100">
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-              <span className="text-xs font-bold text-slate-900">
-                Thông báo ({role === "lecturer" ? "Giảng viên" : "Sinh viên"})
-              </span>
-            </div>
+          <DropdownMenuLabel className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3.5 py-2.5">
+            <span className="text-xs font-bold text-slate-900">
+              Thông báo cố vấn
+            </span>
 
             <div className="flex items-center gap-1.5">
               {effectiveUnreadCount > 0 ? (
@@ -214,13 +213,13 @@ export const NotificationBell = ({
                     e.stopPropagation();
                     void handleMarkAllRead();
                   }}
-                  className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 hover:bg-blue-100 cursor-pointer"
+                  className="inline-flex cursor-pointer items-center gap-1 rounded-md bg-sidebar-accent px-2 py-1 text-xs font-semibold text-sidebar-accent-foreground hover:bg-blue-100 tabular-nums"
                 >
-                  <CheckCheck className="h-3 w-3" />
+                  <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>Đọc tất cả ({effectiveUnreadCount})</span>
                 </button>
               ) : (
-                <span className="text-[11px] font-medium text-slate-400">
+                <span className="text-xs font-medium text-slate-500">
                   Đã đọc hết
                 </span>
               )}
@@ -232,98 +231,107 @@ export const NotificationBell = ({
                   e.stopPropagation();
                   handleRefresh();
                 }}
+                aria-label="Làm mới thông báo"
                 title="Làm mới thông báo"
-                className="rounded p-1 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 cursor-pointer"
+                className="cursor-pointer rounded-md p-1.5 text-slate-500 hover:bg-slate-200/70 hover:text-slate-900"
               >
                 <RefreshCw
-                  className={cn("h-3 w-3", isFetching && "animate-spin")}
+                  className={cn("h-3.5 w-3.5", isFetching && "animate-spin")}
+                  aria-hidden="true"
                 />
               </button>
             </div>
           </DropdownMenuLabel>
         </DropdownMenuGroup>
 
-        {/* Filter Pills: Tất cả | Đã nhận | Đã gửi */}
-        <div className="grid grid-cols-3 gap-1 border-b border-slate-100 bg-white px-2.5 py-2 text-[11px]">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setFilter("all");
-              setLimit(DEFAULT_PAGE_SIZE);
-            }}
-            className={cn(
-              "rounded-md py-1 font-semibold transition-colors cursor-pointer",
-              filter === "all"
-                ? "bg-blue-50 text-blue-700 ring-1 ring-blue-200"
-                : "text-slate-600 hover:bg-slate-50",
-            )}
-          >
-            Tất cả ({allCount})
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setFilter("received");
-              setLimit(DEFAULT_PAGE_SIZE);
-            }}
-            className={cn(
-              "rounded-md py-1 font-semibold transition-colors cursor-pointer",
-              filter === "received"
-                ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                : "text-slate-600 hover:bg-slate-50",
-            )}
-          >
-            Đã nhận ({receivedCount})
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setFilter("sent");
-              setLimit(DEFAULT_PAGE_SIZE);
-            }}
-            className={cn(
-              "rounded-md py-1 font-semibold transition-colors cursor-pointer",
-              filter === "sent"
-                ? "bg-slate-100 text-slate-800 ring-1 ring-slate-300"
-                : "text-slate-600 hover:bg-slate-50",
-            )}
-          >
-            Đã gửi ({sentCount})
-          </button>
+        {/* Filter Tabs */}
+        <div
+          role="tablist"
+          aria-label="Lọc loại thông báo"
+          className="grid grid-cols-3 gap-1 border-b border-slate-200 bg-white px-2.5 py-2 text-xs tabular-nums"
+        >
+          {(
+            [
+              { id: "all", label: `Tất cả (${allCount})` },
+              { id: "received", label: `Đã nhận (${receivedCount})` },
+              { id: "sent", label: `Đã gửi (${sentCount})` },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={filter === tab.id}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setFilter(tab.id);
+                setLimit(DEFAULT_PAGE_SIZE);
+              }}
+              className={cn(
+                "cursor-pointer rounded-md py-1.5 font-semibold transition-colors",
+                filter === tab.id
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-slate-600 hover:bg-slate-100",
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        {/* Individual Notification Events Feed */}
-        <div className="max-h-96 overflow-y-auto p-1">
+        {/* Feed */}
+        <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
           {isLoading ? (
-            <div className="space-y-2 p-2.5">
+            <div className="space-y-2 p-3">
               <Skeleton className="h-14 w-full rounded-lg" />
               <Skeleton className="h-14 w-full rounded-lg" />
               <Skeleton className="h-14 w-full rounded-lg" />
             </div>
+          ) : isError ? (
+            <div className="px-4 py-6 text-center">
+              <AlertCircle
+                className="mx-auto mb-2 h-6 w-6 text-destructive"
+                aria-hidden="true"
+              />
+              <p className="text-xs font-semibold text-slate-900">
+                Không thể tải danh sách thông báo
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleRefresh();
+                }}
+                className="mt-2.5 h-8 cursor-pointer gap-1.5 text-xs"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Thử lại</span>
+              </Button>
+            </div>
           ) : items.length === 0 ? (
-            <div className="py-8 px-4 text-center">
-              <MessageSquare className="mx-auto h-7 w-7 text-slate-300 mb-2" />
-              <p className="text-xs font-semibold text-slate-700">
+            <div className="px-4 py-8 text-center">
+              <MessageSquare
+                className="mx-auto mb-2 h-6 w-6 text-slate-400"
+                aria-hidden="true"
+              />
+              <p className="text-xs font-semibold text-slate-800">
                 {filter === "received"
                   ? "Chưa có thông báo nhận được"
                   : filter === "sent"
                     ? "Chưa có thông báo đã gửi"
                     : "Chưa có thông báo cố vấn nào"}
               </p>
-              <p className="mt-0.5 text-[11px] text-slate-400">
-                Mọi tin nhắn, lịch hẹn và nhiệm vụ sẽ được lưu và hiển thị đầy
-                đủ tại đây.
+              <p className="mt-1 text-xs text-slate-500">
+                Tin nhắn, lịch hẹn và nhiệm vụ sẽ hiển thị tại đây.
               </p>
             </div>
           ) : (
             <>
-              <DropdownMenuGroup>
+              <DropdownMenuGroup className="divide-y divide-slate-100">
                 {items.map((item) => {
                   const isSentByMe = item.direction === "sent";
                   const isUnreadReceived = !isSentByMe && !item.is_read;
@@ -341,87 +349,82 @@ export const NotificationBell = ({
                       key={item.id}
                       onClick={() => handleOpenNotification(item)}
                       className={cn(
-                        "flex flex-col items-start gap-1.5 rounded-lg px-3 py-2.5 cursor-pointer transition-colors",
+                        "flex cursor-pointer flex-col items-start gap-1.5 rounded-none px-3.5 py-2.5 transition-colors",
                         isUnreadReceived
-                          ? "bg-blue-50/75 focus:bg-blue-50"
+                          ? "bg-sidebar-accent/70 focus:bg-sidebar-accent"
                           : "focus:bg-slate-50",
                       )}
                     >
                       {/* Row 1: Counterpart + Course + Timestamp */}
                       <div className="flex w-full items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="flex min-w-0 items-center gap-1.5">
                           {isUnreadReceived && (
-                            <span className="h-2 w-2 rounded-full bg-rose-600 shrink-0" />
+                            <span
+                              className="h-2 w-2 shrink-0 rounded-full bg-destructive"
+                              aria-hidden="true"
+                            />
                           )}
                           <span className="truncate text-xs font-bold text-slate-900">
                             {counterpartName}
                           </span>
-                          <Badge
-                            variant="outline"
-                            className="font-mono text-[10px] px-1 py-0 border-slate-200 bg-white text-slate-700 shrink-0"
-                          >
-                            {item.course_code}
-                          </Badge>
+                          <span className="shrink-0 font-mono text-xs text-slate-500">
+                            · {item.course_code}
+                          </span>
                         </div>
 
-                        <span className="flex items-center gap-0.5 text-[10px] text-slate-400 shrink-0">
-                          <Clock className="h-2.5 w-2.5" />
+                        <span className="flex shrink-0 items-center gap-1 text-xs text-slate-500 tabular-nums">
+                          <Clock className="h-3 w-3" aria-hidden="true" />
                           {formatRelativeTime(item.created_at)}
                         </span>
                       </div>
 
-                      {/* Row 2: Event Type + Direction & Read Receipt */}
-                      <div className="flex w-full flex-wrap items-center gap-1.5">
-                        <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
-                          <TypeIcon className="h-2.5 w-2.5" />
+                      {/* Row 2: Type metadata + single status badge */}
+                      <div className="flex w-full items-center justify-between gap-2 text-xs">
+                        <span className="inline-flex items-center gap-1 font-medium text-slate-600">
+                          <TypeIcon className="h-3.5 w-3.5" aria-hidden="true" />
                           {typeMeta.label}
                         </span>
 
                         {isSentByMe ? (
-                          item.is_read ? (
-                            <Badge
-                              variant="outline"
-                              className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-semibold px-1.5 py-0 gap-1"
-                            >
-                              <CheckCheck className="h-2.5 w-2.5" />
-                              <span>
-                                Đã gửi • {counterpartRoleLabel} đã xem
-                              </span>
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="border-blue-200 bg-blue-50/70 text-blue-700 text-[10px] font-semibold px-1.5 py-0 gap-1"
-                            >
-                              <ArrowUpRight className="h-2.5 w-2.5" />
-                              <span>
-                                Đã gửi • Chờ {counterpartRoleLabel} xem
-                              </span>
-                            </Badge>
-                          )
-                        ) : isUnreadReceived ? (
-                          <Badge className="bg-rose-600 text-white hover:bg-rose-600 text-[10px] font-semibold px-1.5 py-0 gap-1">
-                            <ArrowDownLeft className="h-2.5 w-2.5" />
-                            <span>
-                              Đã nhận từ {counterpartRoleLabel} • Chưa đọc
-                            </span>
-                          </Badge>
-                        ) : (
                           <Badge
                             variant="outline"
-                            className="border-emerald-200 bg-emerald-50/70 text-emerald-700 text-[10px] font-semibold px-1.5 py-0 gap-1"
+                            className={cn(
+                              "gap-1 px-2 py-0 text-xs font-semibold",
+                              item.is_read
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : "border-slate-200 bg-slate-50 text-slate-700",
+                            )}
                           >
-                            <ArrowDownLeft className="h-2.5 w-2.5" />
+                            {item.is_read ? (
+                              <CheckCheck className="h-3 w-3" aria-hidden="true" />
+                            ) : (
+                              <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                            )}
                             <span>
-                              Đã nhận từ {counterpartRoleLabel} • Đã đọc
+                              {item.is_read
+                                ? `${counterpartRoleLabel} đã xem`
+                                : `Chờ ${counterpartRoleLabel} xem`}
                             </span>
                           </Badge>
+                        ) : isUnreadReceived ? (
+                          <Badge
+                            variant="destructive"
+                            className="gap-1 px-2 py-0 text-xs font-semibold"
+                          >
+                            <ArrowDownLeft className="h-3 w-3" aria-hidden="true" />
+                            <span>Chưa đọc</span>
+                          </Badge>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                            <ArrowDownLeft className="h-3 w-3" aria-hidden="true" />
+                            Đã đọc
+                          </span>
                         )}
                       </div>
 
                       {/* Row 3: Content Preview */}
-                      <p className="w-full line-clamp-2 text-[11px] leading-relaxed text-slate-600">
-                        <span className="font-semibold text-slate-700">
+                      <p className="line-clamp-2 w-full text-xs leading-relaxed text-slate-600">
+                        <span className="font-semibold text-slate-800">
                           {isSentByMe ? "Bạn: " : `${counterpartRoleLabel}: `}
                         </span>
                         {item.content}
@@ -432,7 +435,7 @@ export const NotificationBell = ({
               </DropdownMenuGroup>
 
               {(hasMore || limit > DEFAULT_PAGE_SIZE) && (
-                <div className="flex items-center gap-1.5 px-2 py-1.5 text-center">
+                <div className="flex items-center gap-1.5 p-2 text-center">
                   {hasMore && (
                     <button
                       type="button"
@@ -446,7 +449,7 @@ export const NotificationBell = ({
                           ),
                         );
                       }}
-                      className="flex-1 rounded-md border border-slate-200 bg-slate-50 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
+                      className="flex-1 cursor-pointer rounded-md border border-slate-200 bg-slate-50 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 tabular-nums"
                     >
                       Xem thêm ({items.length}/{notificationData?.total})
                     </button>
@@ -459,7 +462,7 @@ export const NotificationBell = ({
                         e.stopPropagation();
                         setLimit(DEFAULT_PAGE_SIZE);
                       }}
-                      className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-700 cursor-pointer"
+                      className="cursor-pointer rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
                     >
                       Thu gọn
                     </button>
@@ -473,17 +476,17 @@ export const NotificationBell = ({
         <DropdownMenuSeparator className="my-0" />
 
         {/* Footer */}
-        <div className="p-1 bg-slate-50/60">
+        <div className="bg-slate-50 p-1">
           <DropdownMenuItem
             onClick={() => navigate(targetBasePath)}
-            className="flex w-full items-center justify-center gap-1.5 py-2 text-xs font-semibold text-blue-700 focus:bg-blue-50 focus:text-blue-800 cursor-pointer"
+            className="flex w-full cursor-pointer items-center justify-center gap-1.5 py-2 text-xs font-semibold text-sidebar-accent-foreground focus:bg-sidebar-accent"
           >
             <span>
               {role === "lecturer"
-                ? "Mở Trung tâm Cố vấn & Can thiệp"
-                : "Mở Cố vấn & Hướng dẫn Môn học"}
+                ? "Mở Cố vấn & Can thiệp"
+                : "Mở Cố vấn & Hướng dẫn"}
             </span>
-            <ArrowRight className="h-3.5 w-3.5" />
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </DropdownMenuItem>
         </div>
       </DropdownMenuContent>
