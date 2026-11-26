@@ -196,13 +196,19 @@ function getProcessScore(
 function getFeasibilityInfo(
   finalExamScore: number,
   baselinePredScore?: number,
-  riskLevel?: string
-): { label: string; badgeClass: string; message: string; level: "safe" | "challenging" | "danger" | "disqualified" } {
+  riskLevel?: string,
+): {
+  label: string;
+  badgeClass: string;
+  message: string;
+  level: "safe" | "challenging" | "danger" | "disqualified";
+} {
   if (finalExamScore < 3.0) {
     return {
-      label: "🚨 Điểm liệt (< 3.0)",
+      label: "Điểm liệt (< 3.0)",
       badgeClass: "border-rose-300 bg-rose-100 text-rose-800",
-      message: "Theo quy chế đào tạo, điểm thi kết thúc học phần dưới 3.0 bị tính điểm liệt và rớt môn (F) bất kể điểm quá trình.",
+      message:
+        "Theo quy chế đào tạo, điểm thi kết thúc học phần dưới 3.0 bị tính điểm liệt và rớt môn (F) bất kể điểm quá trình.",
       level: "disqualified",
     };
   }
@@ -212,28 +218,31 @@ function getFeasibilityInfo(
 
   if (diff <= 0.5) {
     return {
-      label: "🛡️ Rất khả thi",
+      label: "Rất khả thi",
       badgeClass: "border-emerald-300 bg-emerald-50 text-emerald-700",
-      message: "Mục tiêu điểm số nằm hoàn toàn trong tầm tay, rất phù hợp với phong độ và năng lực học tập của bạn.",
+      message:
+        "Mục tiêu điểm số nằm trong tầm tay, phù hợp với phong độ và năng lực học tập hiện tại.",
       level: "safe",
     };
   }
 
   if (diff <= 1.8) {
     return {
-      label: "⚡ Cần nỗ lực cao",
-      badgeClass: "border-amber-300 bg-amber-50 text-amber-700",
-      message: "Mục tiêu này đòi hỏi bạn cần tăng thêm thời gian tự học, giải thêm bài tập và ôn tập kỹ các chuyên đề trọng tâm.",
+      label: "Cần nỗ lực cao",
+      badgeClass: "border-amber-300 bg-amber-50 text-amber-800",
+      message:
+        "Mục tiêu này đòi hỏi tăng thời gian tự học, giải thêm bài tập và ôn kỹ các chuyên đề trọng tâm.",
       level: "challenging",
     };
   }
 
   return {
-    label: "⚠️ Thử thách rất lớn",
+    label: "Thử thách lớn",
     badgeClass: "border-rose-300 bg-rose-50 text-rose-700",
-    message: riskLevel === "HIGH"
-      ? "Mục tiêu đòi hỏi nỗ lực vượt bậc do môn học có tỷ lệ rớt cao và điểm giữa kỳ chưa tốt. Hãy lập kế hoạch ôn thi từ sớm."
-      : "Mục tiêu cao hơn đáng kể so với dự báo của mô hình. Cần quyết tâm cao độ và chuẩn bị kỹ lưỡng cho kỳ thi cuối kỳ.",
+    message:
+      riskLevel === "HIGH"
+        ? "Mục tiêu đòi hỏi nỗ lực vượt bậc do môn học có rủi ro rớt cao và điểm quá trình chưa tốt. Hãy lập kế hoạch ôn thi sớm."
+        : "Mục tiêu cao hơn đáng kể so với dự báo của mô hình. Cần chuẩn bị kỹ lưỡng cho kỳ thi cuối kỳ.",
     level: "danger",
   };
 }
@@ -287,10 +296,18 @@ export const StudentWhatIfPage = () => {
   }, [searchParams]);
 
   // Real academic data queries
-  const { data: summary, isLoading: isLoadingSummary } =
-    useStudentSummary(studentId);
-  const { data: rawCurrentCourses, isLoading: isLoadingCourses } =
-    useStudentCurrentCourses(studentId);
+  const {
+    data: summary,
+    isLoading: isLoadingSummary,
+    isError: isSummaryError,
+    refetch: refetchSummary,
+  } = useStudentSummary(studentId);
+  const {
+    data: rawCurrentCourses,
+    isLoading: isLoadingCourses,
+    isError: isCoursesError,
+    refetch: refetchCourses,
+  } = useStudentCurrentCourses(studentId);
   const { data: enrollments } = useStudentEnrollments(studentId);
   const { data: predictions, isLoading: isLoadingPredictions } =
     useStudentPredictions(studentId, activeSemesterCode);
@@ -775,41 +792,59 @@ export const StudentWhatIfPage = () => {
 
   return (
     <div className="space-y-6 pb-12">
-      {/* 1. Header Banner (Việt hóa chuẩn) */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      {/* 1. Page Header */}
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              Giả lập Điểm Học tập What-If
-            </h1>
-            <Badge className="bg-blue-600 font-semibold text-white shadow-2xs">
-              <Sparkles className="mr-1 h-3 w-3" />
-              Động cơ XAI
-            </Badge>
-          </div>
-          <p className="mt-1 text-sm text-slate-600 sm:text-base">
-            Mô phỏng điểm thi cuối kỳ trên các môn đang học và khám phá giải thích TreeSHAP trực quan.
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            Giả lập Điểm Học tập What-If
+          </h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Mô phỏng điểm thi cuối kỳ theo trọng số thật và đối chiếu giải thích XAI ·{" "}
+            <span className="font-medium text-slate-800">{activeSemesterLabel}</span>
           </p>
         </div>
-      </div>
+      </header>
+
+      {/* Error Recovery Banner */}
+      {(isSummaryError || isCoursesError) && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" aria-hidden="true" />
+            <span>Không thể tải đầy đủ dữ liệu học vụ cho trình giả lập. Vui lòng thử lại.</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (isSummaryError) void refetchSummary();
+              if (isCoursesError) void refetchCourses();
+            }}
+            className="h-8 w-fit cursor-pointer gap-1.5 border-rose-200 bg-white text-xs font-semibold text-rose-700 hover:bg-rose-100"
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Thử lại</span>
+          </Button>
+        </div>
+      )}
 
       {/* 2. Active Target Course Focus Callout */}
       {focusedCourse && (
-        <div className="flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white shadow-xs">
-              <Zap className="h-5 w-5" />
-            </div>
+        <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-sidebar-accent/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2.5">
+            <Zap className="mt-0.5 h-4.5 w-4.5 shrink-0 text-primary" aria-hidden="true" />
             <div>
-              <p className="text-xs font-semibold text-blue-900">
+              <p className="text-sm font-semibold text-slate-900">
                 Đang tập trung mô phỏng:{" "}
-                <span className="font-mono text-sm font-bold">
+                <span className="font-mono font-bold text-sidebar-accent-foreground">
                   {focusedCourse.course_code}
                 </span>{" "}
-                • {focusedCourse.course_name}
+                · {focusedCourse.course_name}
               </p>
-              <p className="text-xs text-blue-700">
-                Mô hình giải thích TreeSHAP đã sẵn sàng. Bạn có thể kéo thử điểm thi cuối kỳ bên dưới.
+              <p className="mt-0.5 text-xs text-slate-600">
+                Kéo thanh trượt điểm cuối kỳ bên dưới để cập nhật GPA dự kiến và kiểm chứng lại bằng mô hình XAI.
               </p>
             </div>
           </div>
@@ -817,7 +852,7 @@ export const StudentWhatIfPage = () => {
             <Button
               variant="outline"
               size="sm"
-              className="cursor-pointer border-blue-200 bg-white text-xs font-semibold text-blue-700 shadow-2xs hover:bg-blue-50"
+              className="h-8 cursor-pointer border-slate-200 bg-white text-xs font-semibold text-sidebar-accent-foreground shadow-2xs hover:bg-white/80"
               disabled={isFetchingAiVerify || !activeCourseCode}
               onClick={() => {
                 if (!activeCourseCode) return;
@@ -829,20 +864,21 @@ export const StudentWhatIfPage = () => {
             >
               <Sparkles
                 className={cn(
-                  "mr-1.5 h-3.5 w-3.5 text-blue-600",
+                  "mr-1.5 h-3.5 w-3.5 text-primary",
                   isFetchingAiVerify && "animate-spin",
                 )}
+                aria-hidden="true"
               />
-              {isFetchingAiVerify ? "Đang kiểm chứng AI..." : "Kiểm tra lại bằng AI"}
+              {isFetchingAiVerify ? "Đang kiểm chứng..." : "Kiểm chứng bằng AI"}
             </Button>
             <Button
               variant="outline"
               size="sm"
-              className="cursor-pointer border-blue-200 bg-white text-xs font-medium text-blue-800 shadow-2xs hover:bg-blue-50"
+              className="h-8 cursor-pointer border-slate-200 bg-white text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50"
               onClick={handleResetToPredictions}
             >
-              <RotateCcw className="mr-1.5 h-3.5 w-3.5 text-blue-600" />
-              Khôi phục Mặc định AI
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+              Khôi phục mặc định
             </Button>
           </div>
         </div>
@@ -1025,29 +1061,29 @@ export const StudentWhatIfPage = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="cursor-pointer border-slate-200 bg-white text-xs font-semibold text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 shadow-2xs"
+                      className="h-8 cursor-pointer border-slate-200 bg-white text-xs font-semibold text-emerald-700 shadow-2xs hover:border-emerald-300 hover:bg-emerald-50"
                       onClick={handlePresetPassAll}
                     >
-                      <ShieldCheck className="mr-1 h-3.5 w-3.5 text-emerald-600" />
-                      Cứu nguy học vụ (Pass All)
+                      <ShieldCheck className="mr-1 h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                      Đạt tất cả môn
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="cursor-pointer border-slate-200 bg-white text-xs font-semibold text-blue-700 hover:bg-blue-50 hover:border-blue-300 shadow-2xs"
+                      className="h-8 cursor-pointer border-slate-200 bg-white text-xs font-semibold text-sidebar-accent-foreground shadow-2xs hover:bg-sidebar-accent"
                       onClick={handlePresetOptimizeCredits}
                     >
-                      <Target className="mr-1 h-3.5 w-3.5 text-blue-600" />
-                      Tối ưu Tín chỉ (3-4 tín)
+                      <Target className="mr-1 h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                      Tối ưu môn 3–4 TC
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="cursor-pointer border-slate-200 bg-white text-xs font-semibold text-amber-700 hover:bg-amber-50 hover:border-amber-300 shadow-2xs"
+                      className="h-8 cursor-pointer border-slate-200 bg-white text-xs font-semibold text-amber-800 shadow-2xs hover:border-amber-300 hover:bg-amber-50"
                       onClick={handlePresetHonorRoll}
                     >
-                      <Award className="mr-1 h-3.5 w-3.5 text-amber-600" />
-                      Săn Học bổng (GPA ≥ 3.6)
+                      <Award className="mr-1 h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+                      Mục tiêu GPA ≥ 3.6
                     </Button>
                     <Button
                       variant="ghost"
@@ -1245,12 +1281,12 @@ export const StudentWhatIfPage = () => {
                               )}
                               aria-label={`Điểm thi cuối kỳ cho ${course.course_name}`}
                             />
-                            <div className="flex justify-between text-[9px] text-slate-400 mt-0.5">
-                              <span>0 (Liệt)</span>
-                              <span className="text-amber-600 font-semibold">3.0 (Chặn liệt)</span>
-                              <span>4.0 (Qua môn)</span>
-                              <span>7.0 (Khá)</span>
-                              <span>8.5 (Giỏi)</span>
+                            <div className="mt-1 flex justify-between text-xs text-slate-500 tabular-nums">
+                              <span>0</span>
+                              <span className="font-semibold text-amber-700">3.0 (Liệt)</span>
+                              <span>4.0 (Đạt)</span>
+                              <span>7.0 (B)</span>
+                              <span>8.5 (A)</span>
                               <span>10</span>
                             </div>
                           </div>
@@ -1312,11 +1348,18 @@ export const StudentWhatIfPage = () => {
                         <div className="flex items-center gap-2">
                           <Badge
                             variant="outline"
-                            className={cn("text-[10px] font-bold px-2 py-0.5", feasibility.badgeClass)}
+                            className={cn("gap-1 px-2 py-0.5 text-xs font-semibold", feasibility.badgeClass)}
                           >
-                            {feasibility.label}
+                            {feasibility.level === "safe" ? (
+                              <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                            ) : feasibility.level === "challenging" ? (
+                              <Zap className="h-3.5 w-3.5" aria-hidden="true" />
+                            ) : (
+                              <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                            )}
+                            <span>{feasibility.label}</span>
                           </Badge>
-                          <span className="text-[11px] text-slate-500 leading-snug">
+                          <span className="text-xs leading-snug text-slate-600">
                             {feasibility.message}
                           </span>
                         </div>

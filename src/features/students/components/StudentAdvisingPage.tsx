@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  UserCheck,
   Calendar,
   Clock,
   MessageSquare,
@@ -25,6 +24,8 @@ import {
   CalendarCheck,
   Video,
   XCircle,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import {
   Card,
@@ -39,6 +40,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { extractApiError, getInitials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuthUser } from "@/features/auth";
@@ -132,14 +134,6 @@ export interface ActionPlanTask {
 // Helper Utilities
 // ==========================================
 
-function getInitials(name: string): string {
-  const parts = name.trim().split(" ");
-  if (parts.length >= 2) {
-    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-  }
-  return name.slice(0, 2).toUpperCase();
-}
-
 function getDepartmentByCode(courseCode: string): string {
   const code = courseCode.toUpperCase();
   if (code.startsWith("CO")) {
@@ -176,20 +170,6 @@ function getOfficeLocation(courseCode: string): string {
   return "P.304 Nhà H6, Cơ sở Dĩ An";
 }
 
-function extractErrorMessage(err: unknown, fallback: string): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    typeof (err as { response?: { data?: { detail?: unknown } } }).response
-      ?.data?.detail === "string"
-  ) {
-    return (err as { response: { data: { detail: string } } }).response.data
-      .detail;
-  }
-  return fallback;
-}
-
 // ==========================================
 // Main Component
 // ==========================================
@@ -203,8 +183,12 @@ export const StudentAdvisingPage = () => {
   const activeSemesterLabel = formatSemesterLabel(activeSemesterCode);
 
   // Data fetching
-  const { data: currentCourses, isLoading: isLoadingCourses } =
-    useStudentCurrentCourses(studentId);
+  const {
+    data: currentCourses,
+    isLoading: isLoadingCourses,
+    isError: isCoursesError,
+    refetch: refetchCourses,
+  } = useStudentCurrentCourses(studentId);
   const { data: predictions, isLoading: isLoadingPreds } =
     useStudentPredictions(studentId, activeSemesterCode);
   const { data: studentDetail } = useStudentDetail(studentId);
@@ -489,7 +473,7 @@ export const StudentAdvisingPage = () => {
       toast.success("Đã gửi tin nhắn tới Thầy/Cô thành công!");
     } catch (err) {
       toast.error(
-        extractErrorMessage(
+        extractApiError(
           err,
           "Không thể gửi tin nhắn. Vui lòng kiểm tra kết nối máy chủ và thử lại.",
         ),
@@ -577,7 +561,7 @@ export const StudentAdvisingPage = () => {
       });
     } catch (err) {
       toast.error(
-        extractErrorMessage(
+        extractApiError(
           err,
           "Không thể gửi phiếu hẹn tư vấn. Vui lòng thử lại sau.",
         ),
@@ -616,7 +600,7 @@ export const StudentAdvisingPage = () => {
       });
     } catch (err) {
       toast.error(
-        extractErrorMessage(
+        extractApiError(
           err,
           "Không thể xác nhận lịch hẹn lúc này. Vui lòng thử lại.",
         ),
@@ -635,7 +619,7 @@ export const StudentAdvisingPage = () => {
       toast.info("Đã hủy lịch hẹn tư vấn.");
     } catch (err) {
       toast.error(
-        extractErrorMessage(
+        extractApiError(
           err,
           "Không thể hủy lịch hẹn lúc này. Vui lòng thử lại.",
         ),
@@ -673,7 +657,7 @@ export const StudentAdvisingPage = () => {
       });
     } catch (err) {
       toast.error(
-        extractErrorMessage(
+        extractApiError(
           err,
           "Không thể cập nhật trạng thái nhiệm vụ. Vui lòng thử lại.",
         ),
@@ -693,49 +677,53 @@ export const StudentAdvisingPage = () => {
   const isSubmittingBooking =
     createOrGetSessionMutation.isPending || createAppointmentMutation.isPending;
 
-  return (
-    <div className="space-y-6">
-      {/* 1. Header Banner */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      return (
+    <div className="space-y-6 pb-10">
+      {/* 1. Page Header */}
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              Cố vấn Học vụ & Hướng dẫn Môn học
-            </h1>
-            <Badge className="bg-blue-600 px-2.5 py-0.5 text-xs font-semibold text-white shadow-2xs">
-              <Sparkles className="mr-1 h-3 w-3" />
-              {activeSemesterLabel} Hub
-            </Badge>
-          </div>
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            Cố vấn học vụ &amp; Hướng dẫn môn học
+          </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Kênh trao đổi trực tiếp với Giảng viên phụ trách các môn học đang
-            theo học kỳ này và Văn phòng Cố vấn học vụ khoa.
+            Trao đổi trực tiếp với giảng viên phụ trách và Văn phòng Cố vấn học vụ ·{" "}
+            <span className="font-medium text-slate-800">{activeSemesterLabel}</span>
           </p>
         </div>
 
-        {/* Quick Academic Standing Overview Badge */}
-        <div className="flex items-center gap-2">
-          <Badge
-            variant="outline"
-            className="border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs"
-          >
-            <UserCheck className="mr-1.5 h-3.5 w-3.5 text-blue-600" />
-            <span>MSSV: {studentId || "—"}</span>
-          </Badge>
-          <Badge
-            variant="outline"
-            className="border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs"
-          >
-            <GraduationCap className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
-            <span>
-              GPA:{" "}
-              {studentSummary?.cumulative_gpa !== undefined
-                ? `${studentSummary.cumulative_gpa.toFixed(2)}/4.0`
-                : "—"}
-            </span>
-          </Badge>
+        <div className="flex flex-wrap items-center gap-2 tabular-nums">
+          <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 font-mono text-xs font-semibold text-slate-700">
+            MSSV: {studentId || "—"}
+          </span>
+          <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 font-mono text-xs font-semibold text-slate-700">
+            GPA:{" "}
+            {studentSummary?.cumulative_gpa !== undefined
+              ? `${studentSummary.cumulative_gpa.toFixed(2)}/4.00`
+              : "—"}
+          </span>
         </div>
-      </div>
+      </header>
+
+      {isCoursesError && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" aria-hidden="true" />
+            <span>Không thể tải danh sách giảng viên phụ trách môn học. Vui lòng thử lại.</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refetchCourses()}
+            className="h-8 w-fit cursor-pointer gap-1.5 border-rose-200 bg-white text-xs font-semibold text-rose-700 hover:bg-rose-100"
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Thử lại</span>
+          </Button>
+        </div>
+      )}
 
       {/* 2. Main Two-Column Layout (1/3 Left, 2/3 Right) */}
       <div className="grid grid-cols-12 gap-6">
@@ -930,8 +918,7 @@ export const StudentAdvisingPage = () => {
                 </h4>
                 <p className="text-[11px] leading-relaxed text-blue-800/80">
                   Chọn Giảng viên phụ trách môn học ở danh bạ để trao đổi trực
-                  tiếp, đặt lịch tiếp sinh viên (Office Hours) hoặc theo dõi
-                  nhiệm vụ cải thiện được giao.
+                  tiếp, đặt lịch hẹn tư vấn hoặc theo dõi nhiệm vụ cải thiện được giao.
                 </p>
               </div>
             </div>
@@ -1070,11 +1057,11 @@ export const StudentAdvisingPage = () => {
                       : "border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900",
                   )}
                 >
-                  <CalendarCheck className="h-4 w-4" />
-                  <span>Đặt lịch Office Hours</span>
+                  <CalendarCheck className="h-4 w-4" aria-hidden="true" />
+                  <span>Lịch hẹn tư vấn</span>
                   <Badge
                     variant="secondary"
-                    className="text-[10px] font-semibold ml-1"
+                    className="ml-1 text-xs font-semibold tabular-nums"
                   >
                     {currentAppointments.length}
                   </Badge>

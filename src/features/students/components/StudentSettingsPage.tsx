@@ -11,14 +11,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthUser } from "@/features/auth";
+import { extractApiError } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  AlertCircle,
   CheckCircle2,
   Globe,
   GraduationCap,
   HeartHandshake,
   KeyRound,
+  RefreshCw,
   ShieldCheck,
   User,
 } from "lucide-react";
@@ -56,25 +59,15 @@ const studentProfileSchema = z
 
 type StudentProfileFormValues = z.infer<typeof studentProfileSchema>;
 
-function extractError(err: unknown, fallback: string): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    typeof (err as { response?: { data?: { detail?: unknown } } }).response
-      ?.data?.detail === "string"
-  ) {
-    return (err as { response: { data: { detail: string } } }).response.data
-      .detail;
-  }
-  return fallback;
-}
-
 export const StudentSettingsPage = () => {
   const { data: user, isLoading: isLoadingUser } = useAuthUser();
   const studentId = user?.user_code || user?.id;
-  const { data: studentDetail, isLoading: isLoadingDetail } =
-    useStudentDetail(studentId);
+  const {
+    data: studentDetail,
+    isLoading: isLoadingDetail,
+    isError: isDetailError,
+    refetch: refetchDetail,
+  } = useStudentDetail(studentId);
   const updateAccountMutation = useUpdateStudentAccount();
 
   const form = useForm<StudentProfileFormValues>({
@@ -110,143 +103,179 @@ export const StudentSettingsPage = () => {
       });
       form.setValue("password", "");
       form.setValue("confirmPassword", "");
-      toast.success("Đã cập nhật thông tin tài khoản thành công!");
+      toast.success("Đã cập nhật thông tin tài khoản thành công.");
     } catch (err) {
       toast.error(
-        extractError(err, "Không thể cập nhật thông tin. Vui lòng thử lại."),
+        extractApiError(err, "Không thể cập nhật thông tin. Vui lòng thử lại."),
       );
     }
   });
 
   const ctxhDays = Number(studentDetail?.ctxh_days ?? 0);
 
+  const profileFields = [
+    {
+      label: "Mã số sinh viên (MSSV)",
+      value: user?.user_code || "—",
+      mono: true,
+    },
+    {
+      label: "Email nhà trường",
+      value: user?.email || "—",
+      mono: false,
+    },
+    {
+      label: "Khóa đào tạo",
+      value: studentDetail?.cohort || "—",
+      mono: true,
+    },
+    {
+      label: "Ngành đào tạo",
+      value: studentDetail?.major || "—",
+      mono: false,
+    },
+    {
+      label: "Chương trình đào tạo",
+      value: studentDetail?.program || "Chính quy chuẩn",
+      mono: false,
+    },
+    {
+      label: "Chuyên ngành / Định hướng",
+      value: studentDetail?.specialization || "Chưa phân chuyên ngành",
+      mono: false,
+    },
+  ];
+
   return (
     <div className="space-y-6 pb-10">
-      <div>
+      <header>
         <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-          Cài đặt Tài khoản &amp; Hồ sơ Sinh viên
+          Cài đặt tài khoản &amp; Hồ sơ sinh viên
         </h1>
         <p className="mt-1 text-sm text-slate-600">
-          Xem hồ sơ học vụ đồng bộ từ hệ thống và cập nhật tên hiển thị hoặc mật khẩu đăng nhập.
+          Xem hồ sơ học vụ đồng bộ từ nhà trường và cập nhật tên hiển thị hoặc
+          mật khẩu đăng nhập.
         </p>
-      </div>
+      </header>
+
+      {isDetailError && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertCircle
+              className="h-4 w-4 shrink-0 text-rose-600"
+              aria-hidden="true"
+            />
+            <span>Không thể tải hồ sơ học vụ chi tiết. Vui lòng thử lại.</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refetchDetail()}
+            className="h-8 w-fit cursor-pointer gap-1.5 border-rose-200 bg-white text-xs font-semibold text-rose-700 hover:bg-rose-100"
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Thử lại</span>
+          </Button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left 2 Columns: Academic Profile + Account Update Form */}
         <div className="space-y-6 lg:col-span-2">
-          {/* Academic Profile Card (Read-only from StudentDetail) */}
+          {/* Flattened Academic Profile Card (Hairline-First Rule) */}
           <Card className="border-slate-200 bg-white shadow-xs">
             <CardHeader className="border-b border-slate-100 pb-4">
               <CardTitle className="flex items-center gap-2 text-base font-bold text-slate-900">
-                <GraduationCap className="h-5 w-5 text-blue-700" />
-                Hồ sơ Học vụ (SIS)
+                <GraduationCap
+                  className="h-4.5 w-4.5 text-primary"
+                  aria-hidden="true"
+                />
+                Hồ sơ học vụ
               </CardTitle>
               <CardDescription className="text-xs text-slate-500">
-                Dữ liệu chính thức từ phòng Đào tạo (chỉ quản trị viên có quyền chỉnh sửa).
+                Thông tin chính thức do Phòng Đào tạo quản lý (chỉ xem).
               </CardDescription>
             </CardHeader>
-            <CardContent className="pt-4">
+            <CardContent className="p-0">
               {isLoadingUser || isLoadingDetail ? (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 divide-y divide-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
                   {[1, 2, 3, 4, 5, 6].map((i) => (
-                    <Skeleton key={i} className="h-12 w-full rounded-lg" />
+                    <div key={i} className="space-y-2 border-b border-slate-100 p-4">
+                      <Skeleton className="h-3.5 w-28" />
+                      <Skeleton className="h-4 w-44" />
+                    </div>
                   ))}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
-                    <p className="text-[11px] font-semibold uppercase text-slate-500">
-                      Mã số Sinh viên (MSSV)
-                    </p>
-                    <p className="mt-1 font-mono text-sm font-bold text-slate-900">
-                      {user?.user_code || "—"}
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
-                    <p className="text-[11px] font-semibold uppercase text-slate-500">
-                      Email Nhà trường
-                    </p>
-                    <p className="mt-1 truncate text-sm font-medium text-slate-900">
-                      {user?.email || "—"}
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
-                    <p className="text-[11px] font-semibold uppercase text-slate-500">
-                      Khóa học (Cohort)
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">
-                      {studentDetail?.cohort || "—"}
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
-                    <p className="text-[11px] font-semibold uppercase text-slate-500">
-                      Ngành đào tạo
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">
-                      {studentDetail?.major || "—"}
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
-                    <p className="text-[11px] font-semibold uppercase text-slate-500">
-                      Chương trình đào tạo
-                    </p>
-                    <p className="mt-1 text-sm font-medium text-slate-900">
-                      {studentDetail?.program || "Chính quy chuẩn"}
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
-                    <p className="text-[11px] font-semibold uppercase text-slate-500">
-                      Chuyên ngành / Định hướng
-                    </p>
-                    <p className="mt-1 text-sm font-medium text-slate-900">
-                      {studentDetail?.specialization || "Chưa phân chuyên ngành"}
-                    </p>
-                  </div>
-                </div>
+                <dl className="grid grid-cols-1 divide-y divide-slate-100 sm:grid-cols-2">
+                  {profileFields.map((field, idx) => (
+                    <div
+                      key={field.label}
+                      className={cn(
+                        "px-5 py-3.5",
+                        idx % 2 === 1 && "sm:border-l sm:border-slate-100",
+                      )}
+                    >
+                      <dt className="text-xs font-semibold text-slate-500">
+                        {field.label}
+                      </dt>
+                      <dd
+                        className={cn(
+                          "mt-1 truncate text-sm font-semibold text-slate-900",
+                          field.mono && "font-mono tabular-nums",
+                        )}
+                      >
+                        {field.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
               )}
             </CardContent>
           </Card>
 
-          {/* Editable Account & Password Form (Real PUT /users/{id}) */}
+          {/* Editable Account & Password Form */}
           <Card className="border-slate-200 bg-white shadow-xs">
             <CardHeader className="border-b border-slate-100 pb-4">
               <CardTitle className="flex items-center gap-2 text-base font-bold text-slate-900">
-                <User className="h-5 w-5 text-blue-700" />
-                Cập nhật Thông tin &amp; Đổi Mật khẩu
+                <User className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+                Cập nhật thông tin &amp; Đổi mật khẩu
               </CardTitle>
               <CardDescription className="text-xs text-slate-500">
-                Thay đổi được lưu trực tiếp lên máy chủ qua tài khoản hiện hành.
+                Thay đổi được lưu trực tiếp cho tài khoản đang đăng nhập.
               </CardDescription>
             </CardHeader>
-            <CardContent className="pt-4">
-              <form onSubmit={onSubmit} className="space-y-4">
+            <CardContent className="pt-5">
+              <form onSubmit={onSubmit} className="space-y-5">
                 <div className="space-y-1.5">
                   <Label htmlFor="student-name" className="text-xs font-semibold">
                     Họ và tên hiển thị
                   </Label>
                   <Input
                     id="student-name"
+                    aria-invalid={Boolean(form.formState.errors.name)}
                     {...form.register("name")}
-                    className="h-9 text-xs"
+                    className="h-9 text-sm"
                   />
                   {form.formState.errors.name && (
-                    <p className="text-[11px] text-rose-600">
+                    <p role="alert" className="text-xs text-rose-600">
                       {form.formState.errors.name.message}
                     </p>
                   )}
                 </div>
 
                 <div className="border-t border-slate-100 pt-4">
-                  <p className="mb-3 flex items-center gap-1.5 text-xs font-bold text-slate-700">
-                    <KeyRound className="h-3.5 w-3.5 text-blue-600" />
-                    Đổi mật khẩu đăng nhập (để trống nếu không muốn đổi)
+                  <p className="mb-3 flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                    <KeyRound
+                      className="h-3.5 w-3.5 text-primary"
+                      aria-hidden="true"
+                    />
+                    Đổi mật khẩu đăng nhập (để trống nếu giữ nguyên mật khẩu hiện tại)
                   </p>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label
                         htmlFor="student-password"
@@ -257,12 +286,13 @@ export const StudentSettingsPage = () => {
                       <Input
                         id="student-password"
                         type="password"
+                        aria-invalid={Boolean(form.formState.errors.password)}
                         {...form.register("password")}
                         placeholder="Tối thiểu 6 ký tự"
-                        className="h-9 text-xs"
+                        className="h-9 text-sm"
                       />
                       {form.formState.errors.password && (
-                        <p className="text-[11px] text-rose-600">
+                        <p role="alert" className="text-xs text-rose-600">
                           {form.formState.errors.password.message}
                         </p>
                       )}
@@ -278,12 +308,15 @@ export const StudentSettingsPage = () => {
                       <Input
                         id="student-confirm-password"
                         type="password"
+                        aria-invalid={Boolean(
+                          form.formState.errors.confirmPassword,
+                        )}
                         {...form.register("confirmPassword")}
                         placeholder="Nhập lại mật khẩu mới"
-                        className="h-9 text-xs"
+                        className="h-9 text-sm"
                       />
                       {form.formState.errors.confirmPassword && (
-                        <p className="text-[11px] text-rose-600">
+                        <p role="alert" className="text-xs text-rose-600">
                           {form.formState.errors.confirmPassword.message}
                         </p>
                       )}
@@ -294,9 +327,8 @@ export const StudentSettingsPage = () => {
                 <div className="flex justify-end border-t border-slate-100 pt-4">
                   <Button
                     type="submit"
-                    size="sm"
                     disabled={updateAccountMutation.isPending}
-                    className="cursor-pointer bg-blue-600 text-xs font-semibold text-white hover:bg-blue-700"
+                    className="h-9 cursor-pointer bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-brand-blue-hover"
                   >
                     {updateAccountMutation.isPending
                       ? "Đang lưu..."
@@ -308,58 +340,75 @@ export const StudentSettingsPage = () => {
           </Card>
         </div>
 
-        {/* Right Column: Graduation Requirements Snapshot & Session Security */}
-        <div className="space-y-6">
+        {/* Right Column: Flattened Graduation Snapshot */}
+        <div>
           <Card className="border-slate-200 bg-white shadow-xs">
-            <CardHeader className="border-b border-slate-100 pb-3">
+            <CardHeader className="border-b border-slate-100 pb-4">
               <CardTitle className="flex items-center gap-2 text-base font-bold text-slate-900">
-                <ShieldCheck className="h-5 w-5 text-blue-700" />
-                Điều kiện Đầu ra
+                <ShieldCheck
+                  className="h-4.5 w-4.5 text-primary"
+                  aria-hidden="true"
+                />
+                Điều kiện đầu ra
               </CardTitle>
               <CardDescription className="text-xs text-slate-500">
-                Trạng thái ngoại ngữ và Công tác xã hội
+                Trạng thái chuẩn ngoại ngữ và ngày CTXH
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3 pt-4">
-              <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 p-3">
+            <CardContent className="divide-y divide-slate-100 p-0">
+              <div className="flex items-center justify-between px-5 py-4">
                 <div className="flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-blue-600" />
-                  <span className="text-xs font-semibold text-slate-800">
-                    Chuẩn Tiếng Anh
+                  <Globe className="h-4 w-4 text-primary" aria-hidden="true" />
+                  <span className="text-sm font-medium text-slate-800">
+                    Chuẩn ngoại ngữ
                   </span>
                 </div>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-[11px] font-semibold",
-                    studentDetail?.english_pass
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : "border-amber-200 bg-amber-50 text-amber-800",
-                  )}
-                >
-                  {studentDetail?.english_pass ? "Đã đạt" : "Chưa đạt"}
-                </Badge>
+                {isLoadingDetail ? (
+                  <Skeleton className="h-5 w-16" />
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-xs font-semibold",
+                      studentDetail?.english_pass
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-amber-200 bg-amber-50 text-amber-800",
+                    )}
+                  >
+                    {studentDetail?.english_pass ? "Đã đạt" : "Chưa đạt"}
+                  </Badge>
+                )}
               </div>
 
-              <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 p-3">
+              <div className="flex items-center justify-between px-5 py-4">
                 <div className="flex items-center gap-2">
-                  <HeartHandshake className="h-4 w-4 text-indigo-600" />
-                  <span className="text-xs font-semibold text-slate-800">
+                  <HeartHandshake
+                    className="h-4 w-4 text-primary"
+                    aria-hidden="true"
+                  />
+                  <span className="text-sm font-medium text-slate-800">
                     Ngày CTXH
                   </span>
                 </div>
-                <span className="font-mono text-xs font-bold text-slate-900">
-                  {ctxhDays} / 15 ngày
-                </span>
+                {isLoadingDetail ? (
+                  <Skeleton className="h-5 w-20" />
+                ) : (
+                  <span className="font-mono text-sm font-bold text-slate-900 tabular-nums">
+                    {ctxhDays} / 15 ngày
+                  </span>
+                )}
               </div>
 
-              <div className="rounded-lg border border-emerald-200/70 bg-emerald-50/60 p-3 text-xs text-emerald-900">
-                <div className="flex items-center gap-1.5 font-semibold">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  <span>Phiên đăng nhập JWT an toàn</span>
+              <div className="px-5 py-4">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800">
+                  <CheckCircle2
+                    className="h-4 w-4 text-emerald-600"
+                    aria-hidden="true"
+                  />
+                  <span>Tài khoản đang hoạt động</span>
                 </div>
-                <p className="mt-1 text-[11px] text-emerald-800">
-                  Tài khoản đang hoạt động với vai trò Sinh viên ({user?.user_code || "—"}).
+                <p className="mt-1 text-xs text-slate-500 tabular-nums">
+                  Vai trò: Sinh viên · MSSV {user?.user_code || "—"}
                 </p>
               </div>
             </CardContent>

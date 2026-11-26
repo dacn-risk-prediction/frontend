@@ -10,19 +10,22 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { extractApiError } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Semester } from "@/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  AlertCircle,
   Calendar,
   CheckCircle2,
   Clock,
   Pencil,
   Plus,
+  RefreshCw,
   Trash2,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import {
@@ -52,22 +55,13 @@ function toIsoOrNull(localVal?: string): string | null {
   return d.toISOString();
 }
 
-function extractApiError(err: unknown, fallback: string): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    typeof (err as { response?: { data?: { detail?: unknown } } }).response
-      ?.data?.detail === "string"
-  ) {
-    return (err as { response: { data: { detail: string } } }).response.data
-      .detail;
-  }
-  return fallback;
-}
-
 export const AdminSemestersPage = () => {
-  const { data: semesters = [], isLoading } = useAdminSemesters();
+  const {
+    data: semesters = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useAdminSemesters();
   const createSemesterMutation = useCreateSemester();
   const updateSemesterMutation = useUpdateSemester();
   const deleteSemesterMutation = useDeleteSemester();
@@ -77,6 +71,18 @@ export const AdminSemestersPage = () => {
   const [selectedSemester, setSelectedSemester] = useState<Semester | null>(null);
   const [deletingSemester, setDeletingSemester] = useState<Semester | null>(null);
   const [nowTimestamp] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!modalMode && !deletingSemester) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setModalMode(null);
+        setDeletingSemester(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [modalMode, deletingSemester]);
 
   const form = useForm<SemesterFormValues>({
     resolver: zodResolver(semesterFormSchema),
@@ -179,12 +185,33 @@ export const AdminSemestersPage = () => {
         <Button
           size="sm"
           onClick={openCreateModal}
-          className="cursor-pointer gap-1.5 bg-blue-600 text-xs font-semibold text-white hover:bg-blue-700"
+          className="h-9 cursor-pointer gap-1.5 bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-brand-blue-hover"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4" aria-hidden="true" />
           <span>Thêm học kỳ mới</span>
         </Button>
       </div>
+
+      {isError && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" aria-hidden="true" />
+            <span>Không thể tải danh sách học kỳ. Vui lòng thử lại.</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refetch()}
+            className="h-8 w-fit cursor-pointer gap-1.5 border-rose-200 bg-white text-xs font-semibold text-rose-700 hover:bg-rose-100"
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Thử lại</span>
+          </Button>
+        </div>
+      )}
 
       {/* Semesters List Card */}
       <Card className="border-slate-200 bg-white shadow-xs">
@@ -332,8 +359,12 @@ export const AdminSemestersPage = () => {
 
       {/* Create / Edit Modal */}
       {modalMode && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+        >
+          <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-base font-bold text-slate-900">
                 {modalMode === "create"
@@ -460,8 +491,12 @@ export const AdminSemestersPage = () => {
 
       {/* Delete Confirmation */}
       {deletingSemester && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+        >
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
             <h2 className="text-base font-bold text-slate-900">Xác nhận xóa học kỳ</h2>
             <p className="mt-2 text-xs text-slate-600">
               Bạn có chắc chắn muốn xóa học kỳ{" "}

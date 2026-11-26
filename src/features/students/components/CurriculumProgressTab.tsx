@@ -17,11 +17,13 @@ import type {
   StudentCurrentCourseItem,
 } from "@/types";
 import {
+  AlertCircle,
   BookOpen,
   CheckCircle2,
   Clock,
   GitBranch,
   GraduationCap,
+  RefreshCw,
   Search,
   X,
   XCircle,
@@ -48,8 +50,12 @@ export const CurriculumProgressTab = ({
   currentCourses,
   allCourses,
 }: CurriculumProgressTabProps) => {
-  const { data: curriculums = [], isLoading: isLoadingCurriculums } =
-    useCurriculums();
+  const {
+    data: curriculums = [],
+    isLoading: isLoadingCurriculums,
+    isError: isCurriculumsError,
+    refetch: refetchCurriculums,
+  } = useCurriculums();
 
   const [manualCurriculumId, setManualCurriculumId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -60,7 +66,6 @@ export const CurriculumProgressTab = ({
     null,
   );
 
-  // Auto-select curriculum matching student's cohort if not manually chosen
   const defaultCurriculumId = useMemo(() => {
     if (curriculums.length === 0) return "";
     if (studentCohort) {
@@ -75,8 +80,12 @@ export const CurriculumProgressTab = ({
 
   const activeCurriculumId = manualCurriculumId || defaultCurriculumId;
 
-  const { data: curriculumDetail, isLoading: isLoadingDetail } =
-    useCurriculumDetail(activeCurriculumId);
+  const {
+    data: curriculumDetail,
+    isLoading: isLoadingDetail,
+    isError: isDetailError,
+    refetch: refetchDetail,
+  } = useCurriculumDetail(activeCurriculumId);
   const { data: inspectedCourseDetail, isLoading: isLoadingInspected } =
     useCourseDetail(inspectedCourseCode ?? undefined);
 
@@ -88,7 +97,6 @@ export const CurriculumProgressTab = ({
     return map;
   }, [allCourses]);
 
-  // Build student's course status map (passed > enrolled > failed > not_taken)
   const courseStatusMap = useMemo(() => {
     const map = new Map<
       string,
@@ -131,7 +139,6 @@ export const CurriculumProgressTab = ({
     return map;
   }, [enrollments, currentCourses]);
 
-  // Group curriculum structures into Knowledge Blocks with live credit calculations
   const groupedBlocks = useMemo(() => {
     if (!curriculumDetail?.structures) return [];
     const blockMap = new Map<
@@ -246,27 +253,61 @@ export const CurriculumProgressTab = ({
     };
   }, [groupedBlocks]);
 
+  const hasError = isCurriculumsError || isDetailError;
+
   return (
     <div className="space-y-5">
+      {hasError && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertCircle
+              className="h-4 w-4 shrink-0 text-rose-600"
+              aria-hidden="true"
+            />
+            <span>Không thể tải khung chương trình đào tạo. Vui lòng thử lại.</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (isCurriculumsError) void refetchCurriculums();
+              if (isDetailError) void refetchDetail();
+            }}
+            className="h-8 w-fit cursor-pointer gap-1.5 border-rose-200 bg-white text-xs font-semibold text-rose-700 hover:bg-rose-100"
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Thử lại</span>
+          </Button>
+        </div>
+      )}
+
       {/* Curriculum Selector & Filter Header */}
       <Card className="border-slate-200 bg-white shadow-xs">
-        <CardHeader className="pb-4">
+        <CardHeader className="border-b border-slate-100 pb-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2 text-lg font-bold text-slate-900">
-                <GraduationCap className="h-5 w-5 text-blue-700" />
-                Khung Chương trình Đào tạo &amp; Môn Tiên quyết
+              <CardTitle className="flex items-center gap-2 text-base font-bold text-slate-900">
+                <GraduationCap
+                  className="h-4.5 w-4.5 text-primary"
+                  aria-hidden="true"
+                />
+                Khung chương trình đào tạo &amp; Môn tiên quyết
               </CardTitle>
-              <CardDescription className="text-xs text-slate-500">
-                Đối chiếu bảng điểm đã tích lũy với từng khối kiến thức và tra cứu điều kiện môn học trước / song hành.
+              <CardDescription className="mt-0.5 text-xs text-slate-500">
+                Đối chiếu bảng điểm đã tích lũy với từng khối kiến thức và tra
+                cứu điều kiện học trước / song hành.
               </CardDescription>
             </div>
 
             {curriculums.length > 0 && (
               <select
+                aria-label="Chọn khung chương trình đào tạo"
                 value={activeCurriculumId}
                 onChange={(e) => setManualCurriculumId(e.target.value)}
-                className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                className="h-8 rounded-lg border border-input bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
               >
                 {curriculums.map((c) => (
                   <option key={c.curriculum_id} value={c.curriculum_id}>
@@ -278,8 +319,8 @@ export const CurriculumProgressTab = ({
           </div>
 
           {/* Summary Strip + Filters */}
-          <div className="mt-3 flex flex-col gap-3 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-1.5">
+          <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-1.5 tabular-nums">
               {(
                 [
                   { id: "ALL", label: `Tất cả (${totalCurriculumStats.total})` },
@@ -307,10 +348,10 @@ export const CurriculumProgressTab = ({
                   size="sm"
                   onClick={() => setStatusFilter(pill.id)}
                   className={cn(
-                    "h-7 cursor-pointer rounded-md px-2.5 text-[11px] font-semibold",
+                    "h-8 cursor-pointer rounded-lg px-3 text-xs font-semibold",
                     statusFilter === pill.id
-                      ? "bg-slate-900 text-white"
-                      : "bg-white text-slate-600 hover:bg-slate-50",
+                      ? "bg-slate-900 text-white hover:bg-slate-800"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
                   )}
                 >
                   {pill.label}
@@ -319,41 +360,48 @@ export const CurriculumProgressTab = ({
             </div>
 
             <div className="relative w-full sm:w-64">
-              <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+              <Search
+                className="pointer-events-none absolute top-2 left-2.5 h-4 w-4 text-slate-400"
+                aria-hidden="true"
+              />
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Tìm mã môn, tên môn, tiên quyết..."
-                className="h-8 pl-8 text-xs bg-slate-50/60"
+                className="h-8 pl-8 text-xs"
               />
             </div>
           </div>
         </CardHeader>
 
-        {/* Inline Course Prerequisites Inspector */}
+        {/* Inline Course Prerequisites Inspector (Hairline strip, not nested card) */}
         {inspectedCourseCode && (
-          <div className="mx-6 mb-4 rounded-xl border border-blue-200 bg-blue-50/50 p-4">
+          <div className="border-b border-slate-200 bg-sidebar-accent/50 px-5 py-4">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2">
-                <GitBranch className="h-4 w-4 text-blue-700" />
+                <GitBranch
+                  className="h-4 w-4 shrink-0 text-sidebar-accent-foreground"
+                  aria-hidden="true"
+                />
                 <div>
                   <h4 className="text-xs font-bold text-slate-900">
-                    Điều kiện Tiên quyết / Song hành — {inspectedCourseCode}
+                    Điều kiện tiên quyết / song hành — {inspectedCourseCode}
                     {inspectedCourseDetail?.course_name
                       ? ` (${inspectedCourseDetail.course_name})`
                       : ""}
                   </h4>
-                  <p className="text-[11px] text-slate-600">
+                  <p className="text-xs text-slate-600">
                     Kiểm tra tự động tình trạng hoàn thành các học phần điều kiện.
                   </p>
                 </div>
               </div>
               <button
                 type="button"
+                aria-label="Đóng bảng kiểm tra tiên quyết"
                 onClick={() => setInspectedCourseCode(null)}
-                className="rounded p-1 text-slate-500 hover:bg-blue-100 hover:text-slate-900 cursor-pointer"
+                className="cursor-pointer rounded-md p-1 text-slate-500 hover:bg-white hover:text-slate-900"
               >
-                <X className="h-4 w-4" />
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -363,7 +411,8 @@ export const CurriculumProgressTab = ({
               ) : !inspectedCourseDetail ||
                 inspectedCourseDetail.prerequisites.length === 0 ? (
                 <p className="text-xs text-slate-600">
-                  Môn học này không có điều kiện tiên quyết ràng buộc trong danh mục môn học.
+                  Môn học này không có điều kiện tiên quyết ràng buộc trong danh
+                  mục học phần.
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-2">
@@ -386,20 +435,28 @@ export const CurriculumProgressTab = ({
                         )}
                       >
                         {isMet ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <CheckCircle2
+                            className="h-3.5 w-3.5 shrink-0 text-emerald-600"
+                            aria-hidden="true"
+                          />
                         ) : (
-                          <Clock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                          <Clock
+                            className="h-3.5 w-3.5 shrink-0 text-amber-600"
+                            aria-hidden="true"
+                          />
                         )}
                         <span className="font-mono font-bold">{relCode}</span>
                         {relMeta && (
-                          <span className="text-slate-600">{relMeta.course_name}</span>
+                          <span className="text-slate-600">
+                            {relMeta.course_name}
+                          </span>
                         )}
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] font-semibold"
-                        >
-                          {pr.relation_type === "COREQ" ? "Song hành" : "Tiên quyết"}
-                        </Badge>
+                        <span className="text-slate-500">
+                          ·{" "}
+                          {pr.relation_type === "COREQ"
+                            ? "Song hành"
+                            : "Tiên quyết"}
+                        </span>
                       </div>
                     );
                   })}
@@ -409,21 +466,25 @@ export const CurriculumProgressTab = ({
           </div>
         )}
 
-        <CardContent className="space-y-5 pt-0">
+        <CardContent className="divide-y divide-slate-200 p-0">
           {isLoadingCurriculums || isLoadingDetail ? (
-            <div className="space-y-3">
+            <div className="space-y-3 p-5">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-32 w-full rounded-xl" />
+                <Skeleton key={i} className="h-28 w-full rounded-xl" />
               ))}
             </div>
           ) : filteredBlocks.length === 0 ? (
             <div className="py-12 text-center">
-              <BookOpen className="mx-auto h-8 w-8 text-slate-300" />
+              <BookOpen
+                className="mx-auto h-8 w-8 text-slate-300"
+                aria-hidden="true"
+              />
               <p className="mt-2 text-sm font-semibold text-slate-700">
                 Không có học phần nào khớp bộ lọc
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                Thử chọn trạng thái &ldquo;Tất cả&rdquo; hoặc xóa từ khóa tìm kiếm.
+                Thử chọn trạng thái &ldquo;Tất cả&rdquo; hoặc xóa từ khóa tìm
+                kiếm.
               </p>
             </div>
           ) : (
@@ -441,34 +502,29 @@ export const CurriculumProgressTab = ({
                     : 0;
 
               return (
-                <div
-                  key={block.blockId}
-                  className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs"
-                >
+                <section key={block.blockId}>
                   {/* Knowledge Block Header */}
-                  <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-sm font-bold text-slate-900">
                           {block.blockName}
                         </h3>
                         {block.category && (
-                          <Badge
-                            variant="outline"
-                            className="border-slate-200 bg-white text-[10px] font-semibold text-slate-600"
-                          >
-                            {block.category}
-                          </Badge>
+                          <span className="text-xs font-medium text-slate-500">
+                            · {block.category}
+                          </span>
                         )}
                       </div>
-                      <p className="mt-0.5 text-[11px] text-slate-500">
-                        Hoàn thành {block.passedCourses}/{block.totalCourses} môn trong danh mục
+                      <p className="mt-0.5 text-xs text-slate-500 tabular-nums">
+                        Hoàn thành {block.passedCourses}/{block.totalCourses} môn
+                        trong khối kiến thức
                       </p>
                     </div>
 
                     <div className="flex items-center gap-3 sm:w-64">
                       <div className="flex-1">
-                        <div className="flex justify-between text-[11px] font-semibold text-slate-700 mb-1">
+                        <div className="mb-1 flex justify-between text-xs font-semibold text-slate-700 tabular-nums">
                           <span>Tiến độ khối</span>
                           <span className="font-mono">
                             {block.earnedCredits}
@@ -479,10 +535,10 @@ export const CurriculumProgressTab = ({
                         </div>
                         <Progress
                           value={blockPercent}
-                          className="h-1.5 bg-slate-200 **:data-[slot=progress-indicator]:bg-blue-600"
+                          className="h-1.5 bg-slate-200 **:data-[slot=progress-indicator]:bg-primary"
                         />
                       </div>
-                      <span className="font-mono text-xs font-bold text-blue-700 w-9 text-right">
+                      <span className="w-10 text-right font-mono text-xs font-bold text-sidebar-accent-foreground tabular-nums">
                         {blockPercent}%
                       </span>
                     </div>
@@ -491,48 +547,43 @@ export const CurriculumProgressTab = ({
                   {/* Courses Table */}
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
-                      <thead className="border-b border-slate-100 bg-white text-[11px] font-semibold uppercase text-slate-500">
+                      <thead className="border-b border-slate-100 bg-white text-xs font-semibold text-slate-500">
                         <tr>
-                          <th className="px-4 py-2.5">Mã môn</th>
+                          <th className="px-5 py-2.5">Mã môn</th>
                           <th className="px-4 py-2.5">Tên học phần</th>
                           <th className="px-4 py-2.5">TC</th>
-                          <th className="px-4 py-2.5">HK Đề xuất</th>
+                          <th className="px-4 py-2.5">HK đề xuất</th>
                           <th className="px-4 py-2.5">Tiên quyết</th>
-                          <th className="px-4 py-2.5">Trạng thái</th>
+                          <th className="px-5 py-2.5">Trạng thái</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {block.courses.map((course) => (
                           <tr
                             key={course.structureId}
-                            className="hover:bg-slate-50/60 transition-colors"
+                            className="transition-colors hover:bg-slate-50/70"
                           >
-                            <td className="px-4 py-2.5 font-mono font-bold text-slate-900">
+                            <td className="px-5 py-3 font-mono font-bold text-slate-900 tabular-nums">
                               {course.courseCode}
                             </td>
-                            <td className="px-4 py-2.5 font-medium text-slate-800">
-                              <div className="flex items-center gap-1.5">
-                                <span>{course.courseName}</span>
-                                {course.courseType && (
-                                  <Badge
-                                    variant="secondary"
-                                    className="text-[9px] px-1.5 py-0"
-                                  >
-                                    {course.courseType}
-                                  </Badge>
-                                )}
-                              </div>
+                            <td className="px-4 py-3 font-medium text-slate-800">
+                              <span>{course.courseName}</span>
+                              {course.courseType && (
+                                <span className="ml-1.5 text-xs text-slate-500">
+                                  · {course.courseType}
+                                </span>
+                              )}
                             </td>
-                            <td className="px-4 py-2.5 font-mono text-slate-600">
+                            <td className="px-4 py-3 font-mono text-slate-700 tabular-nums">
                               {course.credits}
                             </td>
-                            <td className="px-4 py-2.5 text-slate-500">
+                            <td className="px-4 py-3 text-slate-600 tabular-nums">
                               {course.recommendedSemester || "—"}
                             </td>
-                            <td className="px-4 py-2.5">
-                              <div className="flex items-center gap-1.5">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
                                 {course.prerequisitesText && (
-                                  <span className="font-mono text-[11px] text-slate-600">
+                                  <span className="font-mono text-xs text-slate-600">
                                     {course.prerequisitesText}
                                   </span>
                                 )}
@@ -543,46 +594,60 @@ export const CurriculumProgressTab = ({
                                   onClick={() =>
                                     setInspectedCourseCode(course.courseCode)
                                   }
-                                  className="h-6 cursor-pointer px-1.5 text-[10px] font-semibold text-blue-600 hover:bg-blue-50"
+                                  className="h-7 cursor-pointer px-2 text-xs font-semibold text-primary hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                                 >
-                                  <GitBranch className="mr-1 h-3 w-3" />
+                                  <GitBranch
+                                    className="mr-1 h-3.5 w-3.5"
+                                    aria-hidden="true"
+                                  />
                                   Kiểm tra
                                 </Button>
                               </div>
                             </td>
-                            <td className="px-4 py-2.5">
+                            <td className="px-5 py-3">
                               {course.status === "passed" && (
                                 <Badge
                                   variant="outline"
-                                  className="border-emerald-200 bg-emerald-50 text-[10px] font-semibold text-emerald-700"
+                                  className="border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700"
                                 >
-                                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                                  <CheckCircle2
+                                    className="mr-1 h-3.5 w-3.5"
+                                    aria-hidden="true"
+                                  />
                                   Đã đạt
-                                  {course.bestGrade ? ` (${course.bestGrade})` : ""}
+                                  {course.bestGrade
+                                    ? ` (${course.bestGrade})`
+                                    : ""}
                                 </Badge>
                               )}
                               {course.status === "enrolled" && (
                                 <Badge
                                   variant="outline"
-                                  className="border-blue-200 bg-blue-50 text-[10px] font-semibold text-blue-700"
+                                  className="border-blue-200 bg-sidebar-accent text-xs font-semibold text-sidebar-accent-foreground"
                                 >
-                                  <Clock className="mr-1 h-3 w-3" />
+                                  <Clock
+                                    className="mr-1 h-3.5 w-3.5"
+                                    aria-hidden="true"
+                                  />
                                   Đang học
                                 </Badge>
                               )}
                               {course.status === "failed" && (
                                 <Badge
                                   variant="outline"
-                                  className="border-rose-200 bg-rose-50 text-[10px] font-semibold text-rose-700"
+                                  className="border-rose-200 bg-rose-50 text-xs font-semibold text-rose-700"
                                 >
-                                  <XCircle className="mr-1 h-3 w-3" />
+                                  <XCircle
+                                    className="mr-1 h-3.5 w-3.5"
+                                    aria-hidden="true"
+                                  />
                                   Chưa đạt
                                 </Badge>
                               )}
                               {course.status === "not_taken" && (
                                 <Badge
                                   variant="outline"
-                                  className="border-slate-200 bg-slate-50 text-[10px] font-medium text-slate-500"
+                                  className="border-slate-200 bg-slate-50 text-xs font-medium text-slate-600"
                                 >
                                   Chưa học
                                 </Badge>
@@ -593,7 +658,7 @@ export const CurriculumProgressTab = ({
                       </tbody>
                     </table>
                   </div>
-                </div>
+                </section>
               );
             })
           )}

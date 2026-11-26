@@ -121,8 +121,12 @@ export const StudentSimulationPage = () => {
   const [goalByCourse, setGoalByCourse] = useState<Record<string, TargetGoal>>({});
 
   // 1. Fetch current registered courses & enrollments (fast DB call ~0.05s)
-  const { data: rawCurrentCourses, isLoading: isLoadingCourses } =
-    useStudentCurrentCourses(studentId);
+  const {
+    data: rawCurrentCourses,
+    isLoading: isLoadingCourses,
+    isError: isCoursesError,
+    refetch: refetchCourses,
+  } = useStudentCurrentCourses(studentId);
   const { data: enrollments } = useStudentEnrollments(studentId);
 
   // Filter out exempted courses (final_score === 12)
@@ -401,27 +405,19 @@ export const StudentSimulationPage = () => {
 
   return (
     <div className="space-y-6 pb-12">
-      {/* 1. Header & Quick Actions (Badge xanh AI Sparkles + Nút What-If) */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* 1. Header & Quick Actions */}
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 ring-1 ring-blue-700/10">
-              <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-              AI Dự báo & Mô phỏng
-            </span>
-            <span className="text-xs font-medium text-slate-500">
-              {activeSemesterLabel} • TreeSHAP XAI
-            </span>
-          </div>
-          <h1 className="mt-1 font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             Dự báo Kết quả Học phần
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Dự báo máy học theo nhu cầu, ước lượng điểm thi cuối kỳ và phân tích minh bạch các yếu tố tác động.
+            Dự báo xác suất rớt môn, ước lượng điểm thi cuối kỳ và giải thích yếu tố tác động XAI ·{" "}
+            <span className="font-medium text-slate-800">{activeSemesterLabel}</span>
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -429,34 +425,59 @@ export const StudentSimulationPage = () => {
               refetchSingle();
             }}
             disabled={isRefetchingSingle}
-            className="cursor-pointer gap-1.5 border-slate-200 bg-white text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50"
+            className="h-9 cursor-pointer gap-1.5 border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50"
           >
-            <RefreshCw className={cn("h-3.5 w-3.5 text-slate-500", isRefetchingSingle && "animate-spin")} />
-            <span>Cập nhật AI môn này</span>
+            <RefreshCw className={cn("h-3.5 w-3.5 text-slate-500", isRefetchingSingle && "animate-spin")} aria-hidden="true" />
+            <span>Cập nhật dự báo</span>
           </Button>
           <Button
             size="sm"
             onClick={() => navigateToWhatIf()}
-            className="cursor-pointer gap-1.5 rounded-lg bg-blue-600 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700"
+            className="h-9 cursor-pointer gap-1.5 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground shadow-2xs hover:bg-brand-blue-hover"
           >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            <span>Mô phỏng What-If</span>
-            <ArrowRight className="h-3 w-3" />
+            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Mở giả lập What-If</span>
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </Button>
         </div>
-      </div>
+      </header>
+
+      {/* Error Recovery Banner */}
+      {isCoursesError && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" aria-hidden="true" />
+            <span>Không thể tải danh sách môn học kỳ hiện tại. Vui lòng thử lại.</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refetchCourses()}
+            className="h-8 w-fit cursor-pointer gap-1.5 border-rose-200 bg-white text-xs font-semibold text-rose-700 hover:bg-rose-100"
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Thử lại</span>
+          </Button>
+        </div>
+      )}
 
       {/* Fallback banner when AI Model Service is unreachable or has no forecast */}
       {isPredictionUnavailable && activeCourses.length > 0 && (
-        <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-xs text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-xs text-amber-900 sm:flex-row sm:items-center sm:justify-between"
+        >
           <div className="flex items-start gap-2.5">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-            <div>
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+            <div className="max-w-[70ch]">
               <p className="font-bold text-amber-950">
-                Dịch vụ AI Dự báo tạm thời gián đoạn
+                Dịch vụ dự báo AI tạm thời gián đoạn
               </p>
-              <p className="mt-0.5 text-amber-800">
-                Chưa thể kết nối tới mô hình học máy để suy luận xác suất rớt môn và bóc tách TreeSHAP cho học phần này (dịch vụ suy luận có thể đang khởi động lại hoặc chưa có dữ liệu kỳ hiện tại).
+              <p className="mt-0.5 leading-relaxed text-amber-800">
+                Chưa thể kết nối tới mô hình dự báo cho học phần này. Bạn vẫn có thể xem ước lượng điểm cuối kỳ hoặc thử tải lại sau ít giây.
               </p>
             </div>
           </div>
@@ -467,90 +488,83 @@ export const StudentSimulationPage = () => {
               refetchSingle();
             }}
             disabled={isRefetchingSingle}
-            className="w-fit shrink-0 cursor-pointer border-amber-300 bg-white text-xs font-semibold text-amber-900 hover:bg-amber-100"
+            className="h-8 w-fit shrink-0 cursor-pointer border-amber-300 bg-white text-xs font-semibold text-amber-900 hover:bg-amber-100"
           >
-            <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", isRefetchingSingle && "animate-spin")} />
-            Thử lại AI
+            <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", isRefetchingSingle && "animate-spin")} aria-hidden="true" />
+            Thử lại
           </Button>
         </div>
       )}
 
-      {/* 2. 3 Thẻ KPI Nền Tối Tập Trung Vào Môn Đang Chọn (Chuẩn phong cách bg-slate-900) */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {/* Card 1: Tỷ lệ Rớt môn này (fail_probability) */}
-        <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-md">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1 pr-2">
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-semibold tracking-wide text-slate-400 uppercase">
-                  Tỷ lệ Rớt môn này
-                </p>
-                {currentActiveCourseCode && (
-                  <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[11px] font-bold text-blue-400 ring-1 ring-slate-700">
-                    {currentActiveCourseCode}
-                  </span>
-                )}
-              </div>
-
-              <div className="mt-2 flex items-baseline gap-2">
-                {isLoadingCourseDetail ? (
-                  <Skeleton className="h-9 w-24 bg-slate-800" />
-                ) : activePrediction ? (
-                  <>
-                    <span
-                      className={cn(
-                        "text-3xl font-extrabold tracking-tight",
-                        activePrediction.risk_level === "HIGH"
-                          ? "text-rose-400"
-                          : activePrediction.risk_level === "MEDIUM"
-                            ? "text-amber-400"
-                            : "text-emerald-400"
-                      )}
-                    >
-                      {Math.round(activePrediction.fail_probability * 100)}%
-                    </span>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "ml-1 border-0 px-2 py-0.5 text-xs font-bold",
-                        activePrediction.risk_level === "HIGH"
-                          ? "bg-rose-950/80 text-rose-300 ring-1 ring-rose-500/40"
-                          : activePrediction.risk_level === "MEDIUM"
-                            ? "bg-amber-950/80 text-amber-300 ring-1 ring-amber-500/40"
-                            : "bg-emerald-950/80 text-emerald-300 ring-1 ring-emerald-500/40"
-                      )}
-                    >
-                      {activePrediction.risk_level === "HIGH"
-                        ? "Rủi ro cao"
-                        : activePrediction.risk_level === "MEDIUM"
-                          ? "Cần chú ý"
-                          : "An toàn"}
-                    </Badge>
-                  </>
-                ) : (
-                  <span className="text-2xl font-bold text-slate-500">--</span>
-                )}
-              </div>
+      {/* 2. Top Row — 3 Authoritative Obsidian KPI Cards (Anchor Contrast Rule: slate-300+) */}
+      <section
+        aria-label="Chỉ số dự báo môn đang chọn"
+        className="grid grid-cols-1 gap-4 md:grid-cols-3"
+      >
+        {/* Card 1: Tỷ lệ Rớt môn này */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold tracking-wide uppercase">
+                Tỷ lệ rớt dự báo
+              </span>
+              {currentActiveCourseCode && (
+                <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-xs font-semibold text-sky-300">
+                  {currentActiveCourseCode}
+                </span>
+              )}
             </div>
+            {!activePrediction || activePrediction.risk_level === "LOW" ? (
+              <ShieldCheck className="h-4 w-4 text-emerald-400" aria-hidden="true" />
+            ) : (
+              <AlertTriangle
+                className={cn(
+                  "h-4 w-4",
+                  activePrediction.risk_level === "HIGH" ? "text-rose-400" : "text-amber-400",
+                )}
+                aria-hidden="true"
+              />
+            )}
+          </div>
 
-            <div
-              className={cn(
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ring-1 ring-slate-700/50",
-                !activePrediction
-                  ? "bg-slate-800/80 text-slate-400"
-                  : activePrediction.risk_level === "HIGH"
-                    ? "bg-rose-950/60 text-rose-400 ring-rose-500/40"
+          <div className="mt-2.5 flex items-baseline gap-2 tabular-nums">
+            {isLoadingCourseDetail ? (
+              <Skeleton className="h-9 w-24 bg-slate-800" />
+            ) : activePrediction ? (
+              <>
+                <span
+                  className={cn(
+                    "text-3xl font-extrabold tracking-tight",
+                    activePrediction.risk_level === "HIGH"
+                      ? "text-rose-400"
+                      : activePrediction.risk_level === "MEDIUM"
+                        ? "text-amber-400"
+                        : "text-emerald-400",
+                  )}
+                >
+                  {Math.round(activePrediction.fail_probability * 100)}%
+                </span>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "border-0 px-2 py-0.5 text-xs font-semibold",
+                    activePrediction.risk_level === "HIGH"
+                      ? "bg-rose-950/90 text-rose-200 ring-1 ring-rose-500/40"
+                      : activePrediction.risk_level === "MEDIUM"
+                        ? "bg-amber-950/90 text-amber-200 ring-1 ring-amber-500/40"
+                        : "bg-emerald-950/90 text-emerald-200 ring-1 ring-emerald-500/40",
+                  )}
+                >
+                  {activePrediction.risk_level === "HIGH"
+                    ? "Rủi ro cao"
                     : activePrediction.risk_level === "MEDIUM"
-                      ? "bg-amber-950/60 text-amber-400 ring-amber-500/40"
-                      : "bg-emerald-950/60 text-emerald-400 ring-emerald-500/40"
-              )}
-            >
-              {!activePrediction || activePrediction.risk_level === "LOW" ? (
-                <ShieldCheck className="h-5 w-5" />
-              ) : (
-                <AlertTriangle className="h-5 w-5" />
-              )}
-            </div>
+                      ? "Cần chú ý"
+                      : "An toàn"}
+                </Badge>
+              </>
+            ) : (
+              <span className="text-2xl font-bold text-slate-300">—</span>
+            )}
           </div>
 
           <div className="mt-3 space-y-1.5">
@@ -564,194 +578,194 @@ export const StudentSimulationPage = () => {
                       ? "**:data-[slot=progress-indicator]:bg-rose-500"
                       : activePrediction.risk_level === "MEDIUM"
                         ? "**:data-[slot=progress-indicator]:bg-amber-500"
-                        : "**:data-[slot=progress-indicator]:bg-emerald-500"
+                        : "**:data-[slot=progress-indicator]:bg-emerald-500",
                   )}
                 />
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-300">
                   {activePrediction.risk_level === "HIGH"
-                    ? "Học phần có xác suất rớt cao, cần chủ động can thiệp sớm"
+                    ? "Xác suất rớt cao, cần chủ động lên kế hoạch ôn tập sớm"
                     : activePrediction.risk_level === "MEDIUM"
-                      ? "Mức độ rủi ro trung bình, cần củng cố điểm số"
-                      : "Xác suất rớt thấp, đang duy trì kết quả ổn định"}
+                      ? "Rủi ro trung bình, cần củng cố các cột điểm còn lại"
+                      : "Xác suất rớt thấp, kết quả đang ở mức ổn định"}
                 </p>
               </>
             ) : (
-              <p className="text-xs text-slate-400">Đánh giá rủi ro dựa trên mô hình TreeSHAP...</p>
+              <p className="text-xs text-slate-300">Đang chờ dữ liệu dự báo học phần</p>
             )}
           </div>
         </div>
 
-        {/* Card 2: Điểm Dự kiến & Điểm Chữ môn này (Thang 10, GPA 4.0, Điểm A/B/C) */}
-        <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-md">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1 pr-2">
-              <p className="text-xs font-semibold tracking-wide text-slate-400 uppercase">
-                Điểm Dự kiến Học phần
-              </p>
-              <div className="mt-2 flex items-baseline gap-2">
-                {isLoadingCourseDetail ? (
-                  <Skeleton className="h-9 w-28 bg-slate-800" />
-                ) : activePrediction ? (
-                  <>
-                    <span className="text-3xl font-extrabold tracking-tight text-white">
-                      {activePrediction.predicted_score10.toFixed(1)}
-                    </span>
-                    <span className="text-sm font-semibold text-slate-400">/ 10</span>
-                    <span className="text-slate-600">•</span>
-                    <span className="text-base font-bold text-blue-400">
-                      GPA {activePrediction.predicted_gpa4.toFixed(2)}
-                    </span>
-                    <Badge
-                      variant="outline"
-                      className="ml-auto border-blue-500/40 bg-blue-950/80 px-2 py-0.5 text-xs font-bold text-blue-300 ring-1 ring-blue-500/30"
-                    >
-                      Hạng {score10ToLetter(activePrediction.predicted_score10)}
-                    </Badge>
-                  </>
-                ) : (
-                  <span className="text-2xl font-bold text-slate-500">--</span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-800/80 text-blue-400 ring-1 ring-slate-700/50">
-              <Award className="h-5 w-5" />
-            </div>
+        {/* Card 2: Điểm Dự kiến Học phần */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              Điểm dự kiến học phần
+            </span>
+            <Award className="h-4 w-4 text-sky-400" aria-hidden="true" />
           </div>
 
-          <div className="mt-3 flex items-center justify-between border-t border-slate-800/80 pt-2.5 text-xs text-slate-400">
+          <div className="mt-2.5 flex flex-wrap items-baseline gap-2 tabular-nums">
+            {isLoadingCourseDetail ? (
+              <Skeleton className="h-9 w-28 bg-slate-800" />
+            ) : activePrediction ? (
+              <>
+                <span className="text-3xl font-extrabold tracking-tight text-white">
+                  {activePrediction.predicted_score10.toFixed(1)}
+                </span>
+                <span className="text-sm font-medium text-slate-300">/ 10</span>
+                <span className="text-slate-600" aria-hidden="true">·</span>
+                <span className="text-base font-bold text-sky-300">
+                  GPA {activePrediction.predicted_gpa4.toFixed(2)}
+                </span>
+                <Badge
+                  variant="outline"
+                  className="ml-auto border-sky-500/40 bg-sky-950/70 px-2 py-0.5 text-xs font-semibold text-sky-200"
+                >
+                  Hạng {score10ToLetter(activePrediction.predicted_score10)}
+                </Badge>
+              </>
+            ) : (
+              <span className="text-2xl font-bold text-slate-300">—</span>
+            )}
+          </div>
+
+          <div className="mt-3 flex items-center justify-between border-t border-slate-800 pt-2.5 text-xs text-slate-300 tabular-nums">
             <span>
-              {activeCourseMeta?.credits ? `${activeCourseMeta.credits} tín chỉ` : "Học phần HK261"}
+              {activeCourseMeta?.credits ? `${activeCourseMeta.credits} TC` : activeSemesterCode}
             </span>
             <span>
               {activePrediction
-                ? `Tương đương xếp loại ${score10ToLetter(activePrediction.predicted_score10)} (${activePrediction.predicted_gpa4.toFixed(1)}/4.0)`
-                : "Đang tải dữ liệu học phần..."}
+                ? `Xếp loại ${score10ToLetter(activePrediction.predicted_score10)} (${activePrediction.predicted_gpa4.toFixed(1)}/4.0)`
+                : "Chưa có điểm dự kiến"}
             </span>
           </div>
         </div>
 
-        {/* Card 3: Mục tiêu thi Cuối kỳ cần đạt (để qua môn hoặc đạt loại Khá) */}
-        <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-md">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1 pr-2">
-              <p className="text-xs font-semibold tracking-wide text-slate-400 uppercase">
-                Mục tiêu Cuối kỳ Cần đạt
-              </p>
-              <div className="mt-2 space-y-1">
-                {isLoadingCourseDetail ? (
-                  <Skeleton className="h-9 w-32 bg-slate-800" />
-                ) : activePrediction ? (
-                  <>
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-xs text-slate-400">
-                        Để Qua môn (≥ 4.0):
-                      </span>
-                      <span className="text-base font-extrabold text-emerald-400">
-                        {counterfactualData?.final_exam_targets
-                          ? counterfactualData.final_exam_targets.pass_score !== null &&
-                            counterfactualData.final_exam_targets.pass_score <= 10
-                            ? counterfactualData.final_exam_targets.pass_score <= 3.0
-                              ? "≥ 3.0 (Tránh điểm liệt)"
-                              : `≥ ${counterfactualData.final_exam_targets.pass_score.toFixed(1)} điểm`
-                            : "Vượt 10.0"
-                          : finalExamTargets.pass.label}
-                      </span>
-                    </div>
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-xs text-slate-400">Để Đạt loại B (≥ 7.0):</span>
-                      <span className="text-sm font-bold text-blue-400">
-                        {counterfactualData?.final_exam_targets
-                          ? counterfactualData.final_exam_targets.grade_b_score !== null &&
-                            counterfactualData.final_exam_targets.grade_b_score <= 10
-                            ? counterfactualData.final_exam_targets.grade_b_score <= 3.0
-                              ? "≥ 3.0 (Tránh điểm liệt)"
-                              : `≥ ${counterfactualData.final_exam_targets.grade_b_score.toFixed(1)} điểm`
-                            : "Vượt 10.0"
-                          : finalExamTargets.gradeB.label}
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <span className="text-2xl font-bold text-slate-500">--</span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-800/80 text-amber-400 ring-1 ring-slate-700/50">
-              <Target className="h-5 w-5" />
-            </div>
+        {/* Card 3: Mục tiêu Cuối kỳ Cần đạt */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              Mục tiêu cuối kỳ cần đạt
+            </span>
+            <Target className="h-4 w-4 text-amber-400" aria-hidden="true" />
           </div>
 
-          <p className="mt-2.5 border-t border-slate-800/80 pt-2 text-xs text-slate-400">
+          <div className="mt-2.5 space-y-1.5 tabular-nums">
+            {isLoadingCourseDetail ? (
+              <Skeleton className="h-9 w-32 bg-slate-800" />
+            ) : activePrediction ? (
+              <>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xs text-slate-300">Qua môn (≥ 4.0):</span>
+                  <span className="font-mono text-sm font-bold text-emerald-300">
+                    {counterfactualData?.final_exam_targets
+                      ? counterfactualData.final_exam_targets.pass_score !== null &&
+                        counterfactualData.final_exam_targets.pass_score <= 10
+                        ? counterfactualData.final_exam_targets.pass_score <= 3.0
+                          ? "≥ 3.0 (Tránh điểm liệt)"
+                          : `≥ ${counterfactualData.final_exam_targets.pass_score.toFixed(1)} điểm`
+                        : "Vượt 10.0"
+                      : finalExamTargets.pass.label}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xs text-slate-300">Hạng B (≥ 7.0):</span>
+                  <span className="font-mono text-sm font-bold text-sky-300">
+                    {counterfactualData?.final_exam_targets
+                      ? counterfactualData.final_exam_targets.grade_b_score !== null &&
+                        counterfactualData.final_exam_targets.grade_b_score <= 10
+                        ? counterfactualData.final_exam_targets.grade_b_score <= 3.0
+                          ? "≥ 3.0 (Tránh điểm liệt)"
+                          : `≥ ${counterfactualData.final_exam_targets.grade_b_score.toFixed(1)} điểm`
+                        : "Vượt 10.0"
+                      : finalExamTargets.gradeB.label}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <span className="text-2xl font-bold text-slate-300">—</span>
+            )}
+          </div>
+
+          <p className="mt-3 border-t border-slate-800 pt-2.5 text-xs text-slate-300 tabular-nums">
             {counterfactualData?.final_exam_targets
               ? `${
                   counterfactualData.final_exam_targets.used_exact_marks
-                    ? "Tính theo điểm quá trình đã chốt"
+                    ? "Điểm quá trình đã chốt"
                     : "Ước lượng cột chưa chấm"
-                } (Cuối kỳ ${Math.round(
+                } · Cuối kỳ ${Math.round(
                   (counterfactualData.final_exam_targets.final_exam_weight <= 1
                     ? counterfactualData.final_exam_targets.final_exam_weight * 100
-                    : counterfactualData.final_exam_targets.final_exam_weight) || 50
-                )}%)`
+                    : counterfactualData.final_exam_targets.final_exam_weight) || 50,
+                )}%`
               : finalExamTargets.hasRecordedMarks
-                ? `Điểm quá trình ghi nhận: ${finalExamTargets.estimatedProcessScore}/10 (50% tổng kết)`
-                : "Ước lượng theo dữ liệu thành phần & điểm liệt ≥ 3.0"}
+                ? `Quá trình ghi nhận: ${finalExamTargets.estimatedProcessScore}/10 (50%)`
+                : "Ước lượng theo thành phần · điểm liệt ≥ 3.0"}
           </p>
         </div>
-      </div>
+      </section>
 
-      {/* 3. Lưới chọn môn (Card trắng, 3 tab lọc nhanh, Lazy loading preview) */}
-      <div className="space-y-3">
+      {/* 3. Danh sách Môn học trong kỳ */}
+      <section aria-label="Danh sách môn học trong kỳ" className="space-y-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xs font-bold tracking-wider text-slate-600 uppercase">
-              Danh sách Môn học trong kỳ
+            <h2 className="text-sm font-bold text-slate-900">
+              Danh sách môn học trong kỳ
             </h2>
-            <p className="text-xs text-slate-400">
-              Nhấp vào môn để AI dự báo tức thì (chỉ mất ~0.2s) và tự động lưu vào bộ nhớ cache
+            <p className="text-xs text-slate-500">
+              Chọn một học phần để xem phân tích dự báo XAI và phương án cải thiện tương ứng.
             </p>
           </div>
 
-          {/* 3 Tab Lọc nhỏ: [ Tất cả (N) ] [ 🚨 Cần chú ý (M) ] [ 🛡️ An toàn (K) ] */}
-          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+          {/* 3 Tab Lọc: Tất cả | Cần chú ý | An toàn (Lucide icons, no Unicode emoji) */}
+          <div
+            role="tablist"
+            aria-label="Lọc môn học theo mức rủi ro"
+            className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100/80 p-1 tabular-nums"
+          >
             <button
               type="button"
+              role="tab"
+              aria-selected={courseFilter === "ALL"}
               onClick={() => handleFilterChange("ALL")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer",
+                "cursor-pointer rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors",
                 courseFilter === "ALL"
-                  ? "bg-white text-blue-700 shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-white text-sidebar-accent-foreground shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900",
               )}
             >
               Tất cả ({activeCourses.length})
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={courseFilter === "ATTENTION"}
               onClick={() => handleFilterChange("ATTENTION")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1",
+                "flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors",
                 courseFilter === "ATTENTION"
-                  ? "bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs"
-                  : "text-slate-600 hover:text-rose-700"
+                  ? "bg-white text-rose-700 shadow-2xs"
+                  : "text-slate-600 hover:text-rose-700",
               )}
             >
-              <span>🚨 Cần chú ý</span>
-              <span className="font-bold">({attentionCourses.length})</span>
+              <AlertTriangle className="h-3.5 w-3.5 text-rose-600" aria-hidden="true" />
+              <span>Cần chú ý ({attentionCourses.length})</span>
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={courseFilter === "SAFE"}
               onClick={() => handleFilterChange("SAFE")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1",
+                "flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors",
                 courseFilter === "SAFE"
-                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs"
-                  : "text-slate-600 hover:text-emerald-700"
+                  ? "bg-white text-emerald-700 shadow-2xs"
+                  : "text-slate-600 hover:text-emerald-700",
               )}
             >
-              <span>🛡️ An toàn</span>
-              <span className="font-bold">({safeCourses.length})</span>
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+              <span>An toàn ({safeCourses.length})</span>
             </button>
           </div>
         </div>
@@ -834,10 +848,8 @@ export const StudentSimulationPage = () => {
                     )}
                   </div>
 
-                  <div className="mt-3 flex items-center justify-between border-t border-slate-100/80 pt-2 text-[11px] text-slate-500">
-                    <span>
-                      {course.credits} {course.credits === 1 ? "tín chỉ" : "tín chỉ"}
-                    </span>
+                  <div className="mt-3 flex items-center justify-between border-t border-slate-100/80 pt-2 text-xs text-slate-500 tabular-nums">
+                    <span>{course.credits} TC</span>
                     {cached ? (
                       <div className="flex items-center gap-1.5 font-semibold">
                         <span className="text-slate-700">
@@ -874,9 +886,9 @@ export const StudentSimulationPage = () => {
             })}
           </div>
         )}
-      </div>
+      </section>
 
-      {/* 4. Chi tiết môn đang chọn (Cột trái: Card trắng & Cột phải: TreeSHAP XAI) */}
+      {/* 4. Chi tiết môn đang chọn */}
       {currentActiveCourseCode && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           {/* CỘT TRÁI (7 cols): Card trắng border-slate-200, 4 ô điểm, Cột điểm LMS & Mục tiêu cuối kỳ */}

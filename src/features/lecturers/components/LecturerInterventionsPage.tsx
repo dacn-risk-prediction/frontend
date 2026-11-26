@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthUser } from "@/features/auth";
 import { formatFeatureName } from "@/lib/shap-features";
+import { extractApiError, getInitials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type {
   AppointmentStatus,
@@ -30,7 +31,6 @@ import {
   Search,
   Send,
   ShieldAlert,
-  Sparkles,
   Square,
   UserCheck,
   Users,
@@ -117,28 +117,6 @@ export interface ActionPlanTask {
   deadline: string;
   priority: "HIGH" | "MEDIUM" | "NORMAL";
   completed: boolean;
-}
-
-function getInitials(name: string): string {
-  const parts = name.trim().split(" ");
-  if (parts.length >= 2) {
-    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-  }
-  return name.slice(0, 2).toUpperCase();
-}
-
-function extractErrorMessage(err: unknown, fallback: string): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    typeof (err as { response?: { data?: { detail?: unknown } } }).response
-      ?.data?.detail === "string"
-  ) {
-    return (err as { response: { data: { detail: string } } }).response.data
-      .detail;
-  }
-  return fallback;
 }
 
 export const LecturerInterventionsPage = () => {
@@ -468,7 +446,7 @@ export const LecturerInterventionsPage = () => {
       );
     } catch (err) {
       toast.error(
-        extractErrorMessage(
+        extractApiError(
           err,
           "Không thể gửi tin nhắn. Vui lòng kiểm tra kết nối máy chủ.",
         ),
@@ -513,7 +491,7 @@ export const LecturerInterventionsPage = () => {
       }
     } catch (err) {
       toast.error(
-        extractErrorMessage(err, "Không thể cập nhật trạng thái lịch hẹn."),
+        extractApiError(err, "Không thể cập nhật trạng thái lịch hẹn."),
       );
     }
   };
@@ -554,7 +532,7 @@ export const LecturerInterventionsPage = () => {
       );
     } catch (err) {
       toast.error(
-        extractErrorMessage(err, "Không thể tạo phiếu hẹn. Vui lòng thử lại."),
+        extractApiError(err, "Không thể tạo phiếu hẹn. Vui lòng thử lại."),
       );
     }
   };
@@ -585,7 +563,7 @@ export const LecturerInterventionsPage = () => {
       });
     } catch (err) {
       toast.error(
-        extractErrorMessage(err, "Không thể cập nhật trạng thái nhiệm vụ."),
+        extractApiError(err, "Không thể cập nhật trạng thái nhiệm vụ."),
       );
     }
   };
@@ -620,7 +598,7 @@ export const LecturerInterventionsPage = () => {
       );
     } catch (err) {
       toast.error(
-        extractErrorMessage(err, "Không thể giao nhiệm vụ. Vui lòng thử lại."),
+        extractApiError(err, "Không thể giao nhiệm vụ. Vui lòng thử lại."),
       );
     }
   };
@@ -681,7 +659,7 @@ export const LecturerInterventionsPage = () => {
       `[${courseCode}] Thư mời Cố vấn & Trao đổi Học vụ`,
     );
     const body = encodeURIComponent(
-      `Chào em ${studentName},\n\nThầy/Cô gửi thông báo này liên quan đến kết quả học tập môn ${courseCode}. Em vui lòng sắp xếp thời gian trao đổi trong giờ tiếp sinh viên (Office Hours) hoặc đăng ký lịch hẹn trên hệ thống nhé.\n\nTrân trọng,\n${lecturerName}`,
+      `Chào em ${studentName},\n\nThầy/Cô gửi thông báo này liên quan đến kết quả học tập môn ${courseCode}. Em vui lòng sắp xếp thời gian trao đổi trực tiếp hoặc đăng ký lịch hẹn tư vấn trên hệ thống nhé.\n\nTrân trọng,\n${lecturerName}`,
     );
     window.open(`mailto:${email}?subject=${subject}&body=${body}`, "_self");
   };
@@ -704,37 +682,28 @@ export const LecturerInterventionsPage = () => {
   return (
     <div className="space-y-6 pb-12">
       {/* 1. Header & Quick Actions */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 ring-1 ring-blue-700/10">
-              <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-              Cố vấn Học vụ & Can thiệp Sớm
-            </span>
-            <span className="text-xs font-medium text-slate-500">
-              Học kỳ {activeSemesterCode} • HCMUT
-            </span>
-          </div>
-          <h1 className="mt-1 font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Trung tâm Cố vấn & Can thiệp Sinh viên
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            Cố vấn &amp; Can thiệp sinh viên
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Kênh tương tác hai chiều với sinh viên theo phân loại rủi ro AI:
-            gửi tin nhắn cá nhân, duyệt lịch hẹn và giao nhiệm vụ cải thiện.
+            Trao đổi hai chiều, duyệt lịch hẹn tư vấn và giao nhiệm vụ cải thiện theo phân loại rủi ro AI ·{" "}
+            <span className="font-medium text-slate-800">Học kỳ {activeSemesterCode}</span>
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={() => {
               void refetchClasses();
-              toast.info("Đã làm mới dữ liệu lớp học & sinh viên.");
+              toast.info("Đã làm mới dữ liệu lớp học và sinh viên.");
             }}
-            className="cursor-pointer gap-1.5 border-slate-200 bg-white text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50"
+            className="h-9 cursor-pointer gap-1.5 border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50"
           >
-            <RefreshCw className="h-3.5 w-3.5 text-slate-500" />
+            <RefreshCw className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
             <span>Làm mới dữ liệu</span>
           </Button>
           {selectedStudent && (
@@ -746,118 +715,110 @@ export const LecturerInterventionsPage = () => {
                   `[THÔNG BÁO MÔN ${selectedStudent.courseCode}] Thầy/Cô đã cập nhật tài liệu ôn tập mới trên LMS. Em nhớ xem lại và chủ động đặt lịch tư vấn nếu cần hỗ trợ thêm nhé!`,
                 );
               }}
-              className="cursor-pointer gap-1.5 rounded-lg bg-blue-600 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700"
+              className="h-9 cursor-pointer gap-1.5 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground shadow-2xs hover:bg-brand-blue-hover"
             >
-              <Send className="h-3.5 w-3.5" />
+              <Send className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Nhắc ôn tập nhanh</span>
             </Button>
           )}
         </div>
-      </div>
+      </header>
 
       {/* AI Service Offline Banner */}
       {showAiFallbackBanner && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-900">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-          <p>
+        <div
+          role="status"
+          className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-900"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+          <p className="max-w-[75ch] leading-relaxed">
             Dịch vụ dự báo AI tạm thời chưa phản hồi — danh sách rủi ro đang tạm
-            hiển thị theo quy tắc điểm giữa kỳ &amp; học lại. Mọi chức năng
-            nhắn tin, lịch hẹn và giao nhiệm vụ vẫn đồng bộ trực tiếp với máy
-            chủ.
+            hiển thị theo quy tắc điểm giữa kỳ và học lại. Mọi chức năng nhắn
+            tin, lịch hẹn và giao nhiệm vụ vẫn hoạt động bình thường.
           </p>
         </div>
       )}
 
-      {/* 2. Top Summary KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {/* 2. Top Summary KPI Cards (Obsidian KPI + Anchor Contrast Rule) */}
+      <section
+        aria-label="Tổng quan can thiệp sinh viên"
+        className="grid grid-cols-1 gap-4 md:grid-cols-3"
+      >
         {/* Card 1: Total Students Monitored */}
-        <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-md">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">
-                Tổng Sinh viên Phụ trách
-              </p>
-              <div className="mt-2 flex items-baseline gap-2">
-                {isLoadingClasses || isLoadingEnrollments ? (
-                  <Skeleton className="h-9 w-20 bg-slate-800" />
-                ) : (
-                  <>
-                    <span className="text-3xl font-extrabold tracking-tight text-white">
-                      {students.length}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-400">
-                      sinh viên
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-800/80 text-blue-400 ring-1 ring-slate-700/50">
-              <Users className="h-5 w-5" />
-            </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              Tổng sinh viên phụ trách
+            </span>
+            <Users className="h-4 w-4 text-sky-400" aria-hidden="true" />
           </div>
-          <p className="mt-3 text-xs text-slate-400">
-            Phân bổ trong {classes.length} nhóm lớp giảng dạy trong kỳ
+          <div className="mt-2.5 flex items-baseline gap-2 tabular-nums">
+            {isLoadingClasses || isLoadingEnrollments ? (
+              <Skeleton className="h-9 w-20 bg-slate-800" />
+            ) : (
+              <>
+                <span className="text-3xl font-extrabold tracking-tight text-white">
+                  {students.length}
+                </span>
+                <span className="text-sm font-medium text-slate-300">
+                  sinh viên
+                </span>
+              </>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-slate-300 tabular-nums">
+            Phân bổ trong {classes.length} nhóm lớp giảng dạy kỳ này
           </p>
         </div>
 
         {/* Card 2: Critical Interventions Required */}
-        <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-md">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">
-                Cần Can thiệp Khẩn cấp
-              </p>
-              <div className="mt-2 flex items-baseline gap-2">
-                {isLoadingEnrollments || isLoadingPredictions ? (
-                  <Skeleton className="h-9 w-20 bg-slate-800" />
-                ) : (
-                  <>
-                    <span className="text-3xl font-extrabold tracking-tight text-rose-400">
-                      {criticalCount}
-                    </span>
-                    <Badge className="bg-rose-950/80 text-rose-300 ring-1 ring-rose-500/40 border-0 text-xs font-bold">
-                      {hasAnyAiPrediction ? "AI High Risk" : "GK < 4.0 / Học lại"}
-                    </Badge>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-950/50 text-rose-400 ring-1 ring-rose-500/30">
-              <ShieldAlert className="h-5 w-5" />
-            </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              Cần can thiệp khẩn cấp
+            </span>
+            <ShieldAlert className="h-4 w-4 text-rose-400" aria-hidden="true" />
           </div>
-          <p className="mt-3 text-xs text-slate-400">
-            Có {warningCount} sinh viên khác ở mức Cần chú ý (Medium)
+          <div className="mt-2.5 flex items-baseline gap-2 tabular-nums">
+            {isLoadingEnrollments || isLoadingPredictions ? (
+              <Skeleton className="h-9 w-20 bg-slate-800" />
+            ) : (
+              <>
+                <span className="text-3xl font-extrabold tracking-tight text-rose-400">
+                  {criticalCount}
+                </span>
+                <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-xs font-semibold text-rose-200">
+                  {hasAnyAiPrediction ? "Nguy cơ cao" : "GK < 4.0 / Học lại"}
+                </span>
+              </>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-slate-300 tabular-nums">
+            Có {warningCount} sinh viên khác ở mức cần chú ý
           </p>
         </div>
 
         {/* Card 3: Active Advising Sessions */}
-        <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-md">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">
-                Phiên Cố vấn Đang Mở
-              </p>
-              <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-3xl font-extrabold tracking-tight text-emerald-400">
-                  {serverSessions?.length ?? 0}
-                </span>
-                <Badge className="bg-emerald-950/80 text-emerald-300 ring-1 ring-emerald-500/40 border-0 text-xs font-bold">
-                  {appointments.filter((a) => a.status === "PENDING").length}{" "}
-                  Hẹn chờ duyệt
-                </Badge>
-              </div>
-            </div>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-800/80 text-emerald-400 ring-1 ring-slate-700/50">
-              <CalendarCheck className="h-5 w-5" />
-            </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              Phiên cố vấn đang mở
+            </span>
+            <CalendarCheck className="h-4 w-4 text-emerald-400" aria-hidden="true" />
           </div>
-          <p className="mt-3 text-xs text-slate-400">
-            Đồng bộ trực tiếp với Cổng Sinh viên theo thời gian thực
+          <div className="mt-2.5 flex items-baseline gap-2 tabular-nums">
+            <span className="text-3xl font-extrabold tracking-tight text-emerald-400">
+              {serverSessions?.length ?? 0}
+            </span>
+            <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs font-semibold text-emerald-200">
+              {appointments.filter((a) => a.status === "PENDING").length} hẹn chờ duyệt
+            </span>
+          </div>
+          <p className="mt-3 text-xs text-slate-300">
+            Đồng bộ trực tiếp với Cổng Sinh viên
           </p>
         </div>
-      </div>
+      </section>
 
       {/* 3. Main Workspace: 2-Column Responsive Layout */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -909,61 +870,60 @@ export const LecturerInterventionsPage = () => {
               )}
 
               {/* 4 Tabs Lọc nhanh */}
-              <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 text-[11px]">
+              <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-100/80 p-1 text-xs tabular-nums">
                 <button
                   type="button"
                   onClick={() => setFilterRisk("CRITICAL")}
                   className={cn(
-                    "rounded-md py-1 font-semibold transition-all cursor-pointer flex items-center justify-center gap-1",
+                    "flex cursor-pointer items-center justify-center gap-1 rounded-md py-1.5 font-semibold transition-colors",
                     filterRisk === "CRITICAL"
-                      ? "bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs"
+                      ? "bg-white text-rose-700 shadow-2xs"
                       : "text-slate-600 hover:text-rose-700",
                   )}
                 >
-                  <span>🚨 Can thiệp</span>
-                  <span className="font-bold">({criticalCount})</span>
+                  <ShieldAlert className="h-3.5 w-3.5 text-rose-600" aria-hidden="true" />
+                  <span>Can thiệp ({criticalCount})</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setFilterRisk("WARNING")}
                   className={cn(
-                    "rounded-md py-1 font-semibold transition-all cursor-pointer flex items-center justify-center gap-1",
+                    "flex cursor-pointer items-center justify-center gap-1 rounded-md py-1.5 font-semibold transition-colors",
                     filterRisk === "WARNING"
-                      ? "bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs"
+                      ? "bg-white text-amber-800 shadow-2xs"
                       : "text-slate-600 hover:text-amber-700",
                   )}
                 >
-                  <span>⚠️ Cần chú ý</span>
-                  <span className="font-bold">({warningCount})</span>
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+                  <span>Cần chú ý ({warningCount})</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setFilterRisk("SESSIONS")}
                   className={cn(
-                    "rounded-md py-1 font-semibold transition-all cursor-pointer flex items-center justify-center gap-1",
+                    "flex cursor-pointer items-center justify-center gap-1 rounded-md py-1.5 font-semibold transition-colors",
                     filterRisk === "SESSIONS"
-                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs"
+                      ? "bg-white text-emerald-700 shadow-2xs"
                       : "text-slate-600 hover:text-emerald-700",
                   )}
                 >
-                  <span>💬 Đang cố vấn</span>
-                  <span className="font-bold">({activeSessionsCount})</span>
+                  <MessageSquare className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                  <span>Đang cố vấn ({activeSessionsCount})</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setFilterRisk("ALL")}
                   className={cn(
-                    "rounded-md py-1 font-semibold transition-all cursor-pointer flex items-center justify-center gap-1",
+                    "flex cursor-pointer items-center justify-center gap-1 rounded-md py-1.5 font-semibold transition-colors",
                     filterRisk === "ALL"
-                      ? "bg-white text-blue-700 shadow-2xs font-bold"
+                      ? "bg-white text-sidebar-accent-foreground shadow-2xs"
                       : "text-slate-600 hover:text-slate-900",
                   )}
                 >
-                  <span>Tất cả</span>
-                  <span>({students.length})</span>
+                  <span>Tất cả ({students.length})</span>
                 </button>
               </div>
             </CardHeader>
@@ -1235,7 +1195,7 @@ export const LecturerInterventionsPage = () => {
                     )}
                   >
                     <CalendarCheck className="h-3.5 w-3.5" />
-                    <span>Phiếu hẹn Office Hours ({appointments.length})</span>
+                    <span>Lịch hẹn tư vấn ({appointments.length})</span>
                   </button>
 
                   <button
@@ -1483,14 +1443,14 @@ export const LecturerInterventionsPage = () => {
                                       )}
                                     >
                                       {book.status === "CONFIRMED" &&
-                                        "✅ Đã xác nhận"}
+                                        "Đã xác nhận"}
                                       {book.status === "PENDING" &&
                                         (canLecturerConfirm
-                                          ? "📩 Chờ bạn xác nhận"
-                                          : "⏳ Chờ Sinh viên xác nhận")}
+                                          ? "Chờ bạn xác nhận"
+                                          : "Chờ sinh viên xác nhận")}
                                       {book.status === "COMPLETED" &&
-                                        "✔ Đã hoàn thành"}
-                                      {book.status === "CANCELLED" && "✕ Đã hủy"}
+                                        "Đã hoàn thành"}
+                                      {book.status === "CANCELLED" && "Đã hủy"}
                                     </Badge>
                                     <span className="text-xs font-bold text-slate-900">
                                       {book.subject}
@@ -1781,8 +1741,9 @@ export const LecturerInterventionsPage = () => {
                                 </p>
                               )}
 
-                              <p className="text-[10px] text-slate-400 font-medium mt-1">
-                                📅 {task.deadline}
+                              <p className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-slate-500 tabular-nums">
+                                <Calendar className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                                <span>{task.deadline}</span>
                               </p>
                             </div>
                           </div>

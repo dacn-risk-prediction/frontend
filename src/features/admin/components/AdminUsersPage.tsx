@@ -10,6 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { extractApiError } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { User, UserRole } from "@/types";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,11 +22,13 @@ import {
   type LegacyColumnDef,
 } from "@tanstack/react-table/legacy";
 import {
+  AlertCircle,
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Trash2,
   Users,
@@ -60,20 +63,6 @@ const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Quản trị viên",
 };
 
-function extractApiError(err: unknown, fallback: string): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    typeof (err as { response?: { data?: { detail?: unknown } } }).response
-      ?.data?.detail === "string"
-  ) {
-    return (err as { response: { data: { detail: string } } }).response.data
-      .detail;
-  }
-  return fallback;
-}
-
 export const AdminUsersPage = () => {
   const { data: currentUser } = useAuthUser();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -98,9 +87,28 @@ export const AdminUsersPage = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
 
+  useEffect(() => {
+    if (!isCreateOpen && !editingUser && !deletingUser) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsCreateOpen(false);
+        setEditingUser(null);
+        setDeletingUser(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isCreateOpen, editingUser, deletingUser]);
+
   const skip = (page - 1) * PAGE_SIZE;
   // Fetch PAGE_SIZE + 1 to detect accurately whether a next page exists
-  const { data: rawUsers = [], isLoading, isFetching } = useAdminUsers({
+  const {
+    data: rawUsers = [],
+    isLoading,
+    isFetching,
+    isError,
+    refetch,
+  } = useAdminUsers({
     skip,
     limit: PAGE_SIZE + 1,
     role: roleFilter,
@@ -390,12 +398,33 @@ export const AdminUsersPage = () => {
             createForm.reset();
             setIsCreateOpen(true);
           }}
-          className="cursor-pointer gap-1.5 bg-blue-600 text-xs font-semibold text-white hover:bg-blue-700"
+          className="h-9 cursor-pointer gap-1.5 bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-brand-blue-hover"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4" aria-hidden="true" />
           <span>Tạo tài khoản mới</span>
         </Button>
       </div>
+
+      {isError && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" aria-hidden="true" />
+            <span>Không thể tải danh sách tài khoản người dùng. Vui lòng thử lại.</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refetch()}
+            className="h-8 w-fit cursor-pointer gap-1.5 border-rose-200 bg-white text-xs font-semibold text-rose-700 hover:bg-rose-100"
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Thử lại</span>
+          </Button>
+        </div>
+      )}
 
       {/* Filters & Table Card */}
       <Card className="border-slate-200 bg-white shadow-xs">
@@ -420,7 +449,7 @@ export const AdminUsersPage = () => {
                     { value: "", label: "Tất cả" },
                     { value: "student", label: "Sinh viên" },
                     { value: "lecturer", label: "Giảng viên" },
-                    { value: "admin", label: "Admin" },
+                    { value: "admin", label: "Quản trị" },
                   ] as const
                 ).map((item) => (
                   <button
@@ -596,8 +625,12 @@ export const AdminUsersPage = () => {
 
       {/* Create User Modal */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+        >
+          <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-base font-bold text-slate-900">
                 Tạo tài khoản mới
@@ -763,8 +796,12 @@ export const AdminUsersPage = () => {
 
       {/* Edit User Modal */}
       {editingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+        >
+          <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h2 className="text-base font-bold text-slate-900">
@@ -872,8 +909,12 @@ export const AdminUsersPage = () => {
 
       {/* Delete Confirmation Modal */}
       {deletingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+        >
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
             <h2 className="text-base font-bold text-slate-900">
               Xác nhận xóa tài khoản
             </h2>

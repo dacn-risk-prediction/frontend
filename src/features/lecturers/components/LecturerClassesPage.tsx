@@ -749,26 +749,24 @@ export const LecturerClassesPage = () => {
                     </CardDescription>
                   </div>
 
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
-                    <BookOpen className="h-5 w-5" />
-                  </div>
+                  <BookOpen className="mt-1 h-4.5 w-4.5 shrink-0 text-primary" aria-hidden="true" />
                 </div>
               </CardHeader>
 
               <CardContent className="pt-2">
-                <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-xs">
-                  <div className="flex items-center gap-1.5 text-slate-700 font-medium">
-                    <Users className="h-4 w-4 text-slate-400" />
+                <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-xs tabular-nums">
+                  <div className="flex items-center gap-1.5 font-medium text-slate-700">
+                    <Users className="h-4 w-4 text-slate-400" aria-hidden="true" />
                     <span className="font-bold text-slate-900">
                       {item.total_students}
                     </span>{" "}
-                    Sinh viên đăng ký
+                    sinh viên đăng ký
                   </div>
 
                   <div className="flex items-center gap-1.5 text-slate-500">
-                    <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                    <Calendar className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                     <span>
-                      {item.academic_year || "2026-2027"} • HK {item.term ?? 1}
+                      {item.academic_year || "2026-2027"} · HK {item.term ?? 1}
                     </span>
                   </div>
                 </div>
@@ -777,20 +775,20 @@ export const LecturerClassesPage = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="text-xs text-slate-700 cursor-pointer hover:bg-slate-50"
+                    className="h-8 cursor-pointer text-xs text-slate-700 hover:bg-slate-50"
                     onClick={() => openClassModal(item, "grades")}
                   >
-                    <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-blue-600" />
+                    <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden="true" />
                     Bảng điểm lớp
                   </Button>
                   <Button
                     size="sm"
-                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs cursor-pointer gap-1.5"
+                    className="h-8 cursor-pointer gap-1.5 bg-primary text-xs font-semibold text-primary-foreground hover:bg-brand-blue-hover"
                     onClick={() => openClassModal(item, "xai")}
                   >
-                    <Sparkles className="h-3.5 w-3.5 text-amber-300" />
-                    <span>AI Risk &amp; XAI</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>Phân tích AI &amp; XAI</span>
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                   </Button>
                 </div>
               </CardContent>
@@ -799,10 +797,15 @@ export const LecturerClassesPage = () => {
         </div>
       )}
 
-      {/* 7. Class Detail Modal (Tabs: AI Risk & XAI | Grade Evaluation) */}
+      {/* 7. Class Detail Modal */}
       {selectedClass && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-3 sm:p-5">
-          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Chi tiết lớp ${selectedClass.course_code}`}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 sm:p-5"
+        >
+          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
             {/* Modal Header */}
             <div className="border-b border-slate-200 px-6 pt-4 bg-white">
               <div className="flex items-start justify-between">
@@ -1097,40 +1100,40 @@ export const LecturerClassesPage = () => {
                         type="button"
                         onClick={() => setRiskFilter("HIGH")}
                         className={cn(
-                          "rounded-md px-3 py-1 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1",
+                          "flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors tabular-nums",
                           riskFilter === "HIGH"
-                            ? "bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs"
+                            ? "border border-rose-200 bg-rose-50 text-rose-700"
                             : "text-slate-600 hover:text-rose-700",
                         )}
                       >
-                        <span>🚨 Nguy cơ cao</span>
-                        <span className="font-bold">({riskCounts.high})</span>
+                        <ShieldAlert className="h-3.5 w-3.5 text-rose-600" aria-hidden="true" />
+                        <span>Nguy cơ cao ({riskCounts.high})</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setRiskFilter("MEDIUM")}
                         className={cn(
-                          "rounded-md px-3 py-1 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1",
+                          "flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors tabular-nums",
                           riskFilter === "MEDIUM"
-                            ? "bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs"
+                            ? "border border-amber-200 bg-amber-50 text-amber-800"
                             : "text-slate-600 hover:text-amber-700",
                         )}
                       >
-                        <span>⚠️ Cần chú ý</span>
-                        <span className="font-bold">({riskCounts.medium})</span>
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+                        <span>Cần chú ý ({riskCounts.medium})</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setRiskFilter("LOW")}
                         className={cn(
-                          "rounded-md px-3 py-1 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1",
+                          "flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors tabular-nums",
                           riskFilter === "LOW"
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs"
+                            ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
                             : "text-slate-600 hover:text-emerald-700",
                         )}
                       >
-                        <span>🛡️ An toàn</span>
-                        <span className="font-bold">({riskCounts.low})</span>
+                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                        <span>An toàn ({riskCounts.low})</span>
                       </button>
                     </div>
 
@@ -1379,8 +1382,13 @@ export const LecturerClassesPage = () => {
 
       {/* 8. Student TreeSHAP XAI Detail Modal */}
       {selectedStudentForXai && selectedClass && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4">
-          <div className="flex max-h-[85vh] w-full max-w-xl flex-col rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Phân tích XAI sinh viên ${selectedStudentForXai.student_id}`}
+          className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/60 p-4"
+        >
+          <div className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 bg-slate-900 text-white">
               <div>
