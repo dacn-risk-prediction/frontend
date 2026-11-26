@@ -1,6 +1,5 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -11,8 +10,10 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthUser } from "@/features/auth";
-import { useActiveSemester, formatSemesterLabel } from "@/hooks/use-active-semester";
+import { formatSemesterLabel, useActiveSemester } from "@/hooks/use-active-semester";
+import { cn } from "@/lib/utils";
 import {
+  AlertCircle,
   ArrowRight,
   Award,
   BookOpen,
@@ -22,10 +23,10 @@ import {
   GraduationCap,
   HeartHandshake,
   Minus,
+  RefreshCw,
   Sparkles,
   TrendingDown,
   TrendingUp,
-  User,
   UserCheck,
 } from "lucide-react";
 import { useMemo } from "react";
@@ -38,33 +39,41 @@ import {
   useStudentSummary,
 } from "../api/student-api";
 
-// Standard Bachelor Degree Credit Requirement
 const DEGREE_TOTAL_CREDITS = 128;
+const CTXH_TARGET_DAYS = 15;
+const CTXH_KLTN_MILESTONE = 12;
 
 export const StudentOverviewPage = () => {
   const navigate = useNavigate();
   const { data: user } = useAuthUser();
 
-  // Primary student ID from user profile
   const studentId = user?.user_code || user?.id;
   const { data: activeSemester } = useActiveSemester();
   const resolvedActiveSemester = activeSemester?.semester_code || "HK261";
   const activeSemesterLabel = formatSemesterLabel(resolvedActiveSemester);
 
-  // Fetch real Academic Summary & Semester GPA History
-  const { data: summary, isLoading: isLoadingSummary } =
-    useStudentSummary(studentId);
-  const { data: studentDetail } = useStudentDetail(studentId);
+  const {
+    data: summary,
+    isLoading: isLoadingSummary,
+    isError: isSummaryError,
+    refetch: refetchSummary,
+  } = useStudentSummary(studentId);
 
-  // Fetch real current registered courses (GET /students/{id}/current)
-  const { data: currentCourses, isLoading: isLoadingCourses } =
-    useStudentCurrentCourses(studentId);
+  const { data: studentDetail, isLoading: isLoadingDetail } =
+    useStudentDetail(studentId);
 
-  // Fetch student enrollments & course catalog to identify exempted courses (final_score === 12)
+  const {
+    data: currentCourses,
+    isLoading: isLoadingCourses,
+    isError: isCoursesError,
+    refetch: refetchCourses,
+  } = useStudentCurrentCourses(studentId);
+
   const { data: enrollments } = useStudentEnrollments(studentId);
   const { data: allCourses } = useAllCourses();
 
-  // Lookup set of exempted courses (final_score === 12)
+  const hasDataError = isSummaryError || isCoursesError;
+
   const exemptedCourseSet = useMemo(() => {
     const codes = new Set<string>();
     const classIds = new Set<string>();
@@ -83,7 +92,6 @@ export const StudentOverviewPage = () => {
     return { codes, classIds };
   }, [enrollments]);
 
-  // Filter current courses to only show actively studied courses (excluding exempted courses with final_score = 12)
   const activeCurrentCourses = useMemo(() => {
     if (!currentCourses) return [];
     return currentCourses.filter((c) => {
@@ -97,12 +105,10 @@ export const StudentOverviewPage = () => {
     });
   }, [currentCourses, exemptedCourseSet]);
 
-  // 1. Personalized Greeting name
   const greetingName = user?.name
-    ? user.name.split(" ").slice(-1)[0]
-    : "Nguyen";
+    ? user.name.trim().split(/\s+/).slice(-1)[0]
+    : "bạn";
 
-  // Check if student is a brand new freshman with only 1 in-progress semester (even if they have exempted English courses)
   const hasCompletedGradedSemester = Boolean(
     summary?.semester_gpas?.some(
       (s) => Number(s.semester_gpa ?? s.gpa ?? 0) > 0,
@@ -114,13 +120,10 @@ export const StudentOverviewPage = () => {
     Number(summary?.cumulative_gpa ?? 0) === 0 &&
     Number(summary?.failed_courses_count ?? 0) === 0;
 
-  // 2. Real Cumulative GPA & Delta computation
   const cumulativeGpa = summary?.cumulative_gpa ?? 0;
 
-  // Compute GPA change from the last two COMPLETED semesters (ignoring active in-progress terms with 0.0)
   const gpaDelta = useMemo(() => {
     if (summary?.semester_gpas && summary.semester_gpas.length >= 1) {
-      // Completed semesters with finalized numeric GPA
       const completedList = summary.semester_gpas.filter(
         (s, idx, arr) =>
           !(
@@ -147,7 +150,6 @@ export const StudentOverviewPage = () => {
     return 0;
   }, [summary]);
 
-  // 3. Real Credits Passed & Progress Computation (includes exempted credits with final_score = 12)
   const uncountedExemptedCredits = useMemo(() => {
     if (!enrollments) return 0;
     const courseCreditsMap = new Map<string, number>();
@@ -184,7 +186,6 @@ export const StudentOverviewPage = () => {
   );
   const remainingCredits = Math.max(0, DEGREE_TOTAL_CREDITS - passedCredits);
 
-  // 4. Overall Status computation (consistent with StudentAcademicRecordPage, no hardcoded term)
   const isGraduated = useMemo(() => {
     if (typeof summary?.is_graduated === "boolean") {
       return summary.is_graduated;
@@ -256,12 +257,10 @@ export const StudentOverviewPage = () => {
     };
   }, [currentCourses, activeCurrentCourses, summary, resolvedActiveSemester]);
 
-  // 5. Dynamic GPA Trend Line Chart mapping real semester_gpas
   const displaySemesters = useMemo(() => {
     if (summary?.semester_gpas && summary.semester_gpas.length > 0) {
       return summary.semester_gpas.map((s, idx, arr) => {
         const rawGpa = Number(s.semester_gpa ?? s.gpa ?? 0);
-        // Detect if this is the active in-progress term (last term, gpa 0.0, and has attempted credits)
         const isInProgress =
           idx === arr.length - 1 &&
           rawGpa === 0 &&
@@ -277,25 +276,19 @@ export const StudentOverviewPage = () => {
     return [];
   }, [summary]);
 
-  // Chart layout configuration:
-  // ViewBox: 0 0 650 230
-  // Y-Scale: Min GPA 1.0 (y=175) to Max GPA 4.0 (y=30), Span = 145px
-  // X-Range: from x=60 to x=600, Span = 540px
+  // SVG chart coordinates (ViewBox 650x220, Y scale 1.0->170 down to 4.0->30)
   const chartPoints = useMemo(() => {
     const total = displaySemesters.length;
-    // Find last completed semester GPA to project anchor for in-progress semester
     const lastCompleted = [...displaySemesters]
       .reverse()
       .find((d) => !d.isInProgress);
     const baselineGpa = lastCompleted?.gpa ?? 2.0;
 
     return displaySemesters.map((item, index) => {
-      const x = total === 1 ? 330 : 60 + (index * 540) / (total - 1);
+      const x = total === 1 ? 330 : 65 + (index * 530) / (total - 1);
       const effectiveGpa = item.isInProgress ? baselineGpa : item.gpa;
-
-      // Scale: 1.0 -> y=175, 4.0 -> y=30
       const clampedGpa = Math.max(1.0, Math.min(4.0, effectiveGpa));
-      const y = 175 - ((clampedGpa - 1.0) / 3.0) * 145;
+      const y = 170 - ((clampedGpa - 1.0) / 3.0) * 140;
 
       return {
         ...item,
@@ -306,7 +299,6 @@ export const StudentOverviewPage = () => {
     });
   }, [displaySemesters]);
 
-  // Completed points (for solid curve) & In-progress point
   const completedPoints = useMemo(
     () => chartPoints.filter((p) => !p.isInProgress),
     [chartPoints],
@@ -316,14 +308,13 @@ export const StudentOverviewPage = () => {
     [chartPoints],
   );
 
-  // Smooth Bezier Curve Path & Area Gradient for completed points
   const { curvePath, areaPath } = useMemo(() => {
     if (completedPoints.length === 0) return { curvePath: "", areaPath: "" };
     if (completedPoints.length === 1) {
       const p = completedPoints[0];
       return {
         curvePath: `M ${p.x - 30},${p.y} L ${p.x + 30},${p.y}`,
-        areaPath: `M ${p.x - 30},${p.y} L ${p.x + 30},${p.y} L ${p.x + 30},175 L ${p.x - 30},175 Z`,
+        areaPath: `M ${p.x - 30},${p.y} L ${p.x + 30},${p.y} L ${p.x + 30},170 L ${p.x - 30},170 Z`,
       };
     }
 
@@ -331,474 +322,483 @@ export const StudentOverviewPage = () => {
     for (let i = 0; i < completedPoints.length - 1; i++) {
       const curr = completedPoints[i];
       const next = completedPoints[i + 1];
-      const cpX1 = curr.x + (next.x - curr.x) / 2;
-      const cpY1 = curr.y;
-      const cpX2 = curr.x + (next.x - curr.x) / 2;
-      const cpY2 = next.y;
-      curve += ` C ${cpX1},${cpY1} ${cpX2},${cpY2} ${next.x},${next.y}`;
+      const midX = curr.x + (next.x - curr.x) / 2;
+      curve += ` C ${midX},${curr.y} ${midX},${next.y} ${next.x},${next.y}`;
     }
 
     const first = completedPoints[0];
     const last = completedPoints[completedPoints.length - 1];
-    const area = `${curve} L ${last.x},175 L ${first.x},175 Z`;
+    const area = `${curve} L ${last.x},170 L ${first.x},170 Z`;
 
     return { curvePath: curve, areaPath: area };
   }, [completedPoints]);
 
   const latestCompletedPoint = completedPoints[completedPoints.length - 1];
 
+  // Pillar computations extracted from JSX
+  const academicMet =
+    passedCredits >= DEGREE_TOTAL_CREDITS && cumulativeGpa >= 2.0;
+  const gpaOk = isFirstTermOnly || cumulativeGpa >= 2.0;
+
+  const englishPassed = studentDetail?.english_pass === true;
+  const englishUnknown =
+    studentDetail?.english_pass === null ||
+    studentDetail?.english_pass === undefined;
+
+  const ctxhDays = Number(studentDetail?.ctxh_days ?? 0);
+  const ctxhPercent = Math.min(
+    100,
+    Math.round((ctxhDays / CTXH_TARGET_DAYS) * 100),
+  );
+  const isKltnReady = ctxhDays >= CTXH_KLTN_MILESTONE;
+  const isGradReadyCtxh = ctxhDays >= CTXH_TARGET_DAYS;
+
   return (
-    <div className="space-y-8 pb-10">
-      {/* 1. Personalized Greeting */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-6 pb-10">
+      {/* 1. Header */}
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Good morning, {greetingName}.
+            Xin chào, {greetingName}
           </h1>
-          <p className="mt-1 text-sm text-slate-600 sm:text-base">
-            Here is your academic health at a glance.
+          <p className="mt-1 text-sm text-slate-600">
+            Tổng quan kết quả học tập và điều kiện tốt nghiệp ·{" "}
+            <span className="font-medium text-slate-800">
+              {activeSemesterLabel}
+            </span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => navigate("/student/advising")}
+          className="h-9 w-fit cursor-pointer gap-2 border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-blue-700"
+        >
+          <UserCheck className="h-4 w-4 text-blue-600" />
+          <span>Cố vấn Học vụ</span>
+          <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+        </Button>
+      </header>
+
+      {/* Error Recovery Banner */}
+      {hasDataError && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+            <span>
+              Không thể tải đầy đủ dữ liệu học vụ từ máy chủ. Vui lòng thử tải
+              lại.
+            </span>
+          </div>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate("/student/advising")}
-            className="h-8 cursor-pointer gap-1.5 border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-blue-700"
+            onClick={() => {
+              if (isSummaryError) void refetchSummary();
+              if (isCoursesError) void refetchCourses();
+            }}
+            className="h-8 w-fit cursor-pointer gap-1.5 border-rose-200 bg-white text-xs font-semibold text-rose-700 hover:bg-rose-100"
           >
-            <UserCheck className="h-3.5 w-3.5 text-blue-600" />
-            <span>Cố vấn Học vụ</span>
-            <ArrowRight className="h-3 w-3 text-slate-400" />
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>Thử lại</span>
           </Button>
-          <Badge
-            variant="outline"
-            className="border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-2xs"
-          >
-            <span className="mr-1.5 h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            {activeSemesterLabel} • Active Term
-          </Badge>
         </div>
-      </div>
+      )}
 
-      {/* 2. Quick Stats (Top Row - 3 Dark Cards) */}
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-        {/* Card 1: Cumulative GPA (Real API Data) */}
-        <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-6 text-white shadow-md transition-all hover:border-slate-700">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">
-                Cumulative GPA
-              </p>
-              <div className="mt-2 flex items-baseline gap-1">
-                {isLoadingSummary ? (
-                  <Skeleton className="h-9 w-24 bg-slate-800" />
-                ) : isFirstTermOnly ? (
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-extrabold tracking-tight text-white">
-                      Pending
-                    </span>
-                    <span className="text-xs font-medium text-slate-400">
-                      (1st Term)
-                    </span>
-                  </div>
-                ) : (
-                  <>
-                    <span className="text-3xl font-extrabold tracking-tight text-white">
-                      {cumulativeGpa.toFixed(2)}
-                    </span>
-                    <span className="text-base font-semibold text-slate-400">
-                      / 4.0
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-800/80 text-emerald-400 ring-1 ring-slate-700/50">
-              <Award className="h-5 w-5" />
-            </div>
+      {/* 2. Quick Stats (Top Row - 3 Authoritative Dark KPI Cards) */}
+      <section
+        aria-label="Chỉ số học tập tổng quan"
+        className="grid grid-cols-1 gap-4 md:grid-cols-3"
+      >
+        {/* KPI 1: Cumulative GPA */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              GPA tích lũy
+            </span>
+            <Award className="h-4 w-4 text-emerald-400" aria-hidden="true" />
           </div>
 
-          <div className="mt-4 flex items-center gap-1.5 text-xs font-semibold">
-            {isFirstTermOnly ? (
-              <span className="text-blue-400">
-                1st semester active • Midterms in evaluation
+          <div className="mt-2.5 flex items-baseline gap-1.5 tabular-nums">
+            {isLoadingSummary ? (
+              <Skeleton className="h-9 w-28 bg-slate-800" />
+            ) : isFirstTermOnly ? (
+              <span className="text-2xl font-bold tracking-tight text-white">
+                Đang xét kỳ 1
+              </span>
+            ) : (
+              <>
+                <span className="text-3xl font-extrabold tracking-tight text-white">
+                  {cumulativeGpa.toFixed(2)}
+                </span>
+                <span className="text-sm font-medium text-slate-300">
+                  / 4.00
+                </span>
+              </>
+            )}
+          </div>
+
+          <div className="mt-3 flex items-center gap-1.5 text-xs font-medium tabular-nums">
+            {isLoadingSummary ? (
+              <Skeleton className="h-4 w-44 bg-slate-800" />
+            ) : isFirstTermOnly ? (
+              <span className="text-sky-300">
+                Chưa có điểm học kỳ hoàn tất
               </span>
             ) : gpaDelta > 0 ? (
               <span className="flex items-center gap-1 text-emerald-400">
-                <TrendingUp className="h-3.5 w-3.5" />+{gpaDelta.toFixed(2)}{" "}
-                from last completed semester
+                <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" />
+                +{gpaDelta.toFixed(2)} so với kỳ trước
               </span>
             ) : gpaDelta < 0 ? (
               <span className="flex items-center gap-1 text-rose-400">
-                <TrendingDown className="h-3.5 w-3.5" />
-                {gpaDelta.toFixed(2)} from last completed semester
+                <TrendingDown className="h-3.5 w-3.5" aria-hidden="true" />
+                {gpaDelta.toFixed(2)} so với kỳ trước
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-slate-400">
-                <Minus className="h-3.5 w-3.5" />
-                Unchanged from last completed semester
+              <span className="flex items-center gap-1 text-slate-300">
+                <Minus className="h-3.5 w-3.5" aria-hidden="true" />
+                Giữ nguyên so với kỳ trước
               </span>
             )}
           </div>
         </div>
 
-        {/* Card 2: Credits Completed (Real API Data) */}
-        <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-6 text-white shadow-md transition-all hover:border-slate-700">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">
-                Credits Completed
-              </p>
-              <div className="mt-2 flex items-baseline gap-1">
-                {isLoadingSummary ? (
-                  <Skeleton className="h-9 w-24 bg-slate-800" />
-                ) : (
-                  <>
-                    <span className="text-3xl font-extrabold tracking-tight text-white">
-                      {passedCredits}
-                    </span>
-                    <span className="text-base font-semibold text-slate-400">
-                      / {DEGREE_TOTAL_CREDITS}
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-800/80 text-blue-400 ring-1 ring-slate-700/50">
-              <BookOpen className="h-5 w-5" />
-            </div>
+        {/* KPI 2: Credits Completed */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              Tín chỉ tích lũy
+            </span>
+            <BookOpen className="h-4 w-4 text-sky-400" aria-hidden="true" />
           </div>
 
-          <div className="mt-4">
+          <div className="mt-2.5 flex items-baseline gap-1.5 tabular-nums">
+            {isLoadingSummary ? (
+              <Skeleton className="h-9 w-28 bg-slate-800" />
+            ) : (
+              <>
+                <span className="text-3xl font-extrabold tracking-tight text-white">
+                  {passedCredits}
+                </span>
+                <span className="text-sm font-medium text-slate-300">
+                  / {DEGREE_TOTAL_CREDITS} TC
+                </span>
+              </>
+            )}
+          </div>
+
+          <div className="mt-3 space-y-1.5">
             <Progress
-              value={creditsPercentage}
-              className="h-2 w-full **:data-[slot=progress-track]:bg-slate-800 **:data-[slot=progress-indicator]:bg-blue-500"
+              value={isLoadingSummary ? 0 : creditsPercentage}
+              className="h-1.5 w-full **:data-[slot=progress-track]:bg-slate-800 **:data-[slot=progress-indicator]:bg-sky-400"
             />
-            <p className="mt-2 text-[11px] font-medium text-slate-400">
-              {creditsPercentage}% completed • {remainingCredits} credits
-              remaining
+            <p className="text-xs font-medium text-slate-300 tabular-nums">
+              {isLoadingSummary ? (
+                <Skeleton className="h-3.5 w-36 bg-slate-800" />
+              ) : (
+                `${creditsPercentage}% hoàn thành · Còn ${remainingCredits} TC`
+              )}
             </p>
           </div>
         </div>
 
-        {/* Card 3: Overall Status */}
-        <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-6 text-white shadow-md transition-all hover:border-slate-700">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">
-                Overall Status
-              </p>
-              <div className="mt-2">
-                {isGraduated ? (
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-extrabold tracking-tight text-emerald-400">
-                      Graduated
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                    <div className="flex items-baseline gap-1 whitespace-nowrap">
-                      <span className="text-3xl font-extrabold tracking-tight text-white">
-                        {currentTermEnrollment.credits}
-                      </span>
-                      <span className="text-sm font-semibold text-slate-400">
-                        Credits
-                      </span>
-                    </div>
-                    <span className="font-bold text-slate-600">•</span>
-                    <div className="flex items-baseline gap-1 whitespace-nowrap">
-                      <span className="text-2xl font-bold tracking-tight text-blue-400">
-                        {currentTermEnrollment.classesCount}
-                      </span>
-                      <span className="text-sm font-semibold text-slate-400">
-                        {currentTermEnrollment.classesCount === 1
-                          ? "Class"
-                          : "Classes"}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div
+        {/* KPI 3: Current Term / Academic Standing */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm">
+          <div className="flex items-center justify-between text-slate-300">
+            <span className="text-xs font-semibold tracking-wide uppercase">
+              {isGraduated ? "Tình trạng tốt nghiệp" : "Đăng ký kỳ hiện tại"}
+            </span>
+            <GraduationCap
               className={cn(
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-800/80 ring-1 ring-slate-700/50",
-                isGraduated ? "text-emerald-400" : "text-blue-400"
+                "h-4 w-4",
+                isGraduated ? "text-emerald-400" : "text-sky-400",
               )}
-            >
-              {isGraduated ? (
-                <GraduationCap className="h-5 w-5" />
-              ) : (
-                <BookOpen className="h-5 w-5" />
-              )}
-            </div>
+              aria-hidden="true"
+            />
           </div>
 
-          <div className="mt-4 flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className={cn(
-                "shrink-0 px-2 py-0.5 text-xs font-semibold",
-                isGraduated
-                  ? "border-emerald-500/30 bg-emerald-500/20 text-emerald-300"
-                  : "border-blue-500/30 bg-blue-500/20 text-blue-300"
-              )}
-            >
-              {isGraduated
-                ? graduateSemester
-                : `${currentTermEnrollment.termCode} Enrolled`}
-            </Badge>
-            <span className="truncate text-xs font-medium text-slate-400">
-              {isGraduated
-                ? `Graduated in semester ${graduateSemester}`
-                : "Active semester enrollment"}
-            </span>
+          <div className="mt-2.5 tabular-nums">
+            {isLoadingCourses && isLoadingSummary ? (
+              <Skeleton className="h-9 w-36 bg-slate-800" />
+            ) : isGraduated ? (
+              <span className="text-2xl font-extrabold tracking-tight text-emerald-400 sm:text-3xl">
+                Đã tốt nghiệp
+              </span>
+            ) : (
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className="text-3xl font-extrabold tracking-tight text-white">
+                  {currentTermEnrollment.credits}
+                </span>
+                <span className="text-sm font-medium text-slate-300">TC</span>
+                <span className="text-slate-600" aria-hidden="true">
+                  ·
+                </span>
+                <span className="text-2xl font-bold tracking-tight text-sky-400">
+                  {currentTermEnrollment.classesCount}
+                </span>
+                <span className="text-sm font-medium text-slate-300">
+                  môn học
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-3 flex items-center gap-2 text-xs font-medium text-slate-300">
+            {isGraduated ? (
+              <span className="inline-flex items-center gap-1.5 text-emerald-300">
+                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Hoàn thành chương trình tại {graduateSemester}
+              </span>
+            ) : (
+              <>
+                <span className="rounded bg-sky-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-sky-300">
+                  {currentTermEnrollment.termCode}
+                </span>
+                <span>Đang theo học</span>
+              </>
+            )}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* 2.5 Graduation Readiness — 3 Pillars (Academic, English, CTXH) */}
+      {/* 3. Graduation Readiness — Flattened 3-Pillar Overview */}
       <Card className="border-slate-200 bg-white shadow-xs">
-        <CardHeader className="pb-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <CardHeader className="border-b border-slate-100 pb-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2 text-base font-bold text-slate-900">
-                <GraduationCap className="h-4.5 w-4.5 text-blue-600" />
-                Tiến độ 3 Trụ cột Điều kiện Tốt nghiệp
+                <GraduationCap
+                  className="h-4.5 w-4.5 text-blue-600"
+                  aria-hidden="true"
+                />
+                Điều kiện xét tốt nghiệp
               </CardTitle>
-              <CardDescription className="text-xs text-slate-500">
-                Theo dõi đồng bộ Học vụ (128 TC &amp; GPA ≥ 2.0), Chuẩn Ngoại ngữ và Ngày Công tác xã hội (CTXH).
+              <CardDescription className="mt-0.5 text-xs text-slate-500">
+                Tổng hợp 3 tiêu chuẩn bắt buộc: Học vụ, Chuẩn ngoại ngữ và Ngày
+                công tác xã hội.
               </CardDescription>
             </div>
             <Button
               variant="outline"
               size="sm"
               onClick={() => navigate("/student/record?tab=curriculum")}
-              className="h-8 w-fit cursor-pointer gap-1.5 text-xs"
+              className="h-8 w-fit cursor-pointer gap-1.5 text-xs font-medium"
             >
-              <span>Xem Khung CTĐT</span>
+              <span>Xem khung CTĐT</span>
               <ArrowRight className="h-3.5 w-3.5" />
             </Button>
           </div>
         </CardHeader>
 
-        <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <CardContent className="grid grid-cols-1 divide-y divide-slate-100 p-0 md:grid-cols-3 md:divide-x md:divide-y-0">
           {/* Pillar 1: Academic */}
-          {(() => {
-            const academicMet =
-              passedCredits >= DEGREE_TOTAL_CREDITS && cumulativeGpa >= 2.0;
-            const gpaOk = isFirstTermOnly || cumulativeGpa >= 2.0;
-            return (
-              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
-                      <BookOpen className="h-4 w-4" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-900">
-                      1. Trụ cột Học vụ
-                    </span>
-                  </div>
-                  <Badge
-                    variant="outline"
+          <div className="space-y-3 p-5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <BookOpen className="h-4 w-4 text-blue-600" aria-hidden="true" />
+                <span>Học vụ</span>
+              </div>
+              {!isLoadingSummary && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[11px] font-semibold tabular-nums",
+                    academicMet
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-blue-200 bg-blue-50 text-blue-700",
+                  )}
+                >
+                  {academicMet ? "Đạt chuẩn" : `${creditsPercentage}%`}
+                </Badge>
+              )}
+            </div>
+
+            {isLoadingSummary ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full bg-slate-100" />
+                <Skeleton className="h-2 w-full bg-slate-100" />
+                <Skeleton className="h-3.5 w-3/4 bg-slate-100" />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between text-xs">
+                  <span className="text-slate-600">Tín chỉ tích lũy</span>
+                  <span className="font-mono font-bold text-slate-900 tabular-nums">
+                    {passedCredits} / {DEGREE_TOTAL_CREDITS} TC
+                  </span>
+                </div>
+                <Progress
+                  value={creditsPercentage}
+                  className="h-2 bg-slate-100 **:data-[slot=progress-indicator]:bg-blue-600"
+                />
+                <p className="text-xs text-slate-500">
+                  GPA:{" "}
+                  <strong
                     className={cn(
-                      "text-[10px] font-semibold",
-                      academicMet
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-blue-200 bg-blue-50 text-blue-700",
+                      "tabular-nums",
+                      gpaOk ? "text-emerald-700" : "text-rose-600",
                     )}
                   >
-                    {academicMet ? "Đã đạt" : `${creditsPercentage}%`}
-                  </Badge>
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-baseline justify-between text-xs">
-                    <span className="text-slate-600">Tín chỉ tích lũy</span>
-                    <span className="font-mono font-bold text-slate-900">
-                      {passedCredits} / {DEGREE_TOTAL_CREDITS} TC
-                    </span>
-                  </div>
-                  <Progress
-                    value={creditsPercentage}
-                    className="h-2 bg-slate-200 **:data-[slot=progress-indicator]:bg-blue-600"
-                  />
-                  <p className="text-[11px] text-slate-500">
-                    GPA tích lũy:{" "}
-                    <strong
-                      className={cn(
-                        gpaOk ? "text-emerald-700" : "text-rose-600",
-                      )}
-                    >
-                      {isFirstTermOnly ? "Đang xét kỳ 1" : `${cumulativeGpa.toFixed(2)}/4.0`}
-                    </strong>{" "}
-                    (yêu cầu ≥ 2.0)
-                  </p>
-                </div>
+                    {isFirstTermOnly
+                      ? "Đang xét kỳ 1"
+                      : `${cumulativeGpa.toFixed(2)}/4.00`}
+                  </strong>{" "}
+                  (yêu cầu ≥ 2.00)
+                </p>
               </div>
-            );
-          })()}
+            )}
+          </div>
 
           {/* Pillar 2: English Proficiency */}
-          {(() => {
-            const englishPassed = studentDetail?.english_pass === true;
-            const englishUnknown =
-              studentDetail?.english_pass === null ||
-              studentDetail?.english_pass === undefined;
-            return (
-              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={cn(
-                        "flex h-8 w-8 items-center justify-center rounded-lg",
-                        englishPassed
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-amber-100 text-amber-700",
-                      )}
-                    >
-                      <Globe className="h-4 w-4" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-900">
-                      2. Trụ cột Ngoại ngữ
-                    </span>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[10px] font-semibold",
-                      englishPassed
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-amber-200 bg-amber-50 text-amber-800",
-                    )}
-                  >
-                    {englishPassed
-                      ? "Đạt chuẩn"
-                      : englishUnknown
-                        ? "Chưa cập nhật"
-                        : "Chưa đạt"}
-                  </Badge>
-                </div>
-
-                <div className="flex items-start gap-2 pt-0.5">
-                  {englishPassed ? (
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                  ) : (
-                    <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <div className="space-y-3 p-5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <Globe
+                  className={cn(
+                    "h-4 w-4",
+                    englishPassed ? "text-emerald-600" : "text-amber-600",
                   )}
-                  <p className="text-xs leading-relaxed text-slate-600">
-                    {englishPassed
-                      ? "Bạn đã hoàn thành chuẩn Tiếng Anh đầu ra theo quy định đào tạo."
-                      : "Cần nộp chứng chỉ Tiếng Anh đầu ra hoặc hoàn thành các học phần Anh văn chuẩn trước khi xét tốt nghiệp."}
-                  </p>
-                </div>
+                  aria-hidden="true"
+                />
+                <span>Chuẩn Ngoại ngữ</span>
               </div>
-            );
-          })()}
+              {!isLoadingDetail && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "gap-1 text-[11px] font-semibold",
+                    englishPassed
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-amber-200 bg-amber-50 text-amber-800",
+                  )}
+                >
+                  {englishPassed ? (
+                    <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                  ) : (
+                    <Clock className="h-3 w-3" aria-hidden="true" />
+                  )}
+                  {englishPassed
+                    ? "Đạt chuẩn"
+                    : englishUnknown
+                      ? "Chưa cập nhật"
+                      : "Chưa đạt"}
+                </Badge>
+              )}
+            </div>
+
+            {isLoadingDetail ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full bg-slate-100" />
+                <Skeleton className="h-4 w-5/6 bg-slate-100" />
+              </div>
+            ) : (
+              <p className="text-xs leading-relaxed text-slate-600">
+                {englishPassed
+                  ? "Đã hoàn thành chuẩn Tiếng Anh đầu ra theo quy định đào tạo."
+                  : "Cần nộp chứng chỉ Tiếng Anh đầu ra hoặc hoàn thành học phần Anh văn chuẩn."}
+              </p>
+            )}
+          </div>
 
           {/* Pillar 3: Social Work Days (CTXH) */}
-          {(() => {
-            const ctxhDays = Number(studentDetail?.ctxh_days ?? 0);
-            const ctxhTarget = 15;
-            const ctxhKltnMilestone = 12;
-            const ctxhPercent = Math.min(
-              100,
-              Math.round((ctxhDays / ctxhTarget) * 100),
-            );
-            const isKltnReady = ctxhDays >= ctxhKltnMilestone;
-            const isGradReady = ctxhDays >= ctxhTarget;
-
-            return (
-              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={cn(
-                        "flex h-8 w-8 items-center justify-center rounded-lg",
-                        isGradReady
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-indigo-100 text-indigo-700",
-                      )}
-                    >
-                      <HeartHandshake className="h-4 w-4" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-900">
-                      3. Trụ cột Xã hội (CTXH)
-                    </span>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[10px] font-semibold",
-                      isGradReady
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : isKltnReady
-                          ? "border-blue-200 bg-blue-50 text-blue-700"
-                          : "border-amber-200 bg-amber-50 text-amber-800",
-                    )}
-                  >
-                    {isGradReady
-                      ? "Đủ tốt nghiệp"
-                      : isKltnReady
-                        ? "Đủ đk KLTN"
-                        : `Thiếu ${ctxhKltnMilestone - ctxhDays} ngày KLTN`}
-                  </Badge>
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-baseline justify-between text-xs">
-                    <span className="text-slate-600">Ngày CTXH tích lũy</span>
-                    <span className="font-mono font-bold text-slate-900">
-                      {ctxhDays} / {ctxhTarget} ngày
-                    </span>
-                  </div>
-                  <div className="relative">
-                    <Progress
-                      value={ctxhPercent}
-                      className="h-2 bg-slate-200 **:data-[slot=progress-indicator]:bg-indigo-600"
-                    />
-                    <div
-                      title="Mốc 12 ngày: đủ điều kiện làm KLTN"
-                      className="absolute top-0 bottom-0 left-[80%] w-0.5 bg-amber-500"
-                    />
-                  </div>
-                  <p className="text-[11px] text-slate-500">
-                    Mốc <strong>12 ngày</strong>: đăng ký KLTN • Mốc{" "}
-                    <strong>15 ngày</strong>: xét tốt nghiệp
-                  </p>
-                </div>
+          <div className="space-y-3 p-5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <HeartHandshake
+                  className={cn(
+                    "h-4 w-4",
+                    isGradReadyCtxh ? "text-emerald-600" : "text-indigo-600",
+                  )}
+                  aria-hidden="true"
+                />
+                <span>Công tác xã hội (CTXH)</span>
               </div>
-            );
-          })()}
+              {!isLoadingDetail && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[11px] font-semibold tabular-nums",
+                    isGradReadyCtxh
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : isKltnReady
+                        ? "border-blue-200 bg-blue-50 text-blue-700"
+                        : "border-amber-200 bg-amber-50 text-amber-800",
+                  )}
+                >
+                  {isGradReadyCtxh
+                    ? "Đủ tốt nghiệp"
+                    : isKltnReady
+                      ? "Đủ ĐK KLTN"
+                      : `Thiếu ${CTXH_KLTN_MILESTONE - ctxhDays} ngày KLTN`}
+                </Badge>
+              )}
+            </div>
+
+            {isLoadingDetail ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full bg-slate-100" />
+                <Skeleton className="h-2 w-full bg-slate-100" />
+                <Skeleton className="h-3.5 w-3/4 bg-slate-100" />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between text-xs">
+                  <span className="text-slate-600">Ngày CTXH tích lũy</span>
+                  <span className="font-mono font-bold text-slate-900 tabular-nums">
+                    {ctxhDays} / {CTXH_TARGET_DAYS} ngày
+                  </span>
+                </div>
+                <div className="relative">
+                  <Progress
+                    value={ctxhPercent}
+                    className="h-2 bg-slate-100 **:data-[slot=progress-indicator]:bg-indigo-600"
+                  />
+                  <div
+                    title="Mốc 12 ngày: đủ điều kiện làm KLTN"
+                    className="absolute top-0 bottom-0 left-[80%] w-0.5 bg-amber-500"
+                  />
+                </div>
+                <p className="text-xs text-slate-500">
+                  Mốc <strong>12 ngày</strong>: làm KLTN ·{" "}
+                  <strong>15 ngày</strong>: tốt nghiệp
+                </p>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      {/* 3. Academic Insights (Middle Row - 2 Columns CSS Grid) */}
+      {/* 4. Academic Insights (2 Columns: GPA Trend + Current Courses) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left Column (col-span-2): GPA Trend Line Chart */}
         <Card className="border-slate-200 bg-white shadow-xs lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-col gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="text-lg font-bold text-slate-900">
-                GPA Trend
+              <CardTitle className="text-base font-bold text-slate-900">
+                Xu hướng GPA qua các học kỳ
               </CardTitle>
               <CardDescription className="text-xs text-slate-500">
-                Performance progression over historical semesters
+                Điểm trung bình học kỳ tích lũy theo tiến trình đào tạo
               </CardDescription>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
                 <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
-                <span>Semester GPA</span>
+                <span>GPA học kỳ</span>
               </div>
-              <div className="hidden items-center gap-1.5 text-xs font-medium text-slate-400 sm:flex">
-                <span className="h-0.5 w-3 border-t border-dashed border-slate-300" />
-                <span>Good Standing (2.50)</span>
+              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                <span className="h-0.5 w-3 border-t border-dashed border-slate-400" />
+                <span>Mức khá (2.50)</span>
               </div>
               {inProgressPoint && (
-                <div className="hidden items-center gap-1.5 text-xs font-medium text-blue-600 md:flex">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-blue-600">
                   <span className="h-2 w-2 rounded-full border-2 border-blue-600 bg-white" />
-                  <span>In Progress</span>
+                  <span>Đang học</span>
                 </div>
               )}
             </div>
@@ -809,474 +809,417 @@ export const StudentOverviewPage = () => {
               <Skeleton className="h-56 w-full rounded-lg bg-slate-100" />
             ) : chartPoints.length === 0 ? (
               <div className="flex h-56 flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 text-center">
-                <BookOpen className="mb-2 h-8 w-8 text-slate-300" />
+                <BookOpen
+                  className="mb-2 h-7 w-7 text-slate-300"
+                  aria-hidden="true"
+                />
                 <p className="text-sm font-semibold text-slate-700">
                   Chưa có lịch sử điểm học kỳ
                 </p>
                 <p className="mt-1 max-w-sm text-xs text-slate-500">
-                  Biểu đồ xu hướng GPA sẽ tự động xuất hiện khi các học kỳ được ghi nhận điểm.
+                  Biểu đồ xu hướng GPA sẽ hiển thị tự động khi các học kỳ được
+                  cập nhật điểm chính thức.
                 </p>
               </div>
             ) : (
-              <div className="relative w-full overflow-hidden">
-                {/* Dynamic SVG Curve Line Chart */}
+              <div className="relative w-full">
                 <svg
-                  viewBox="0 0 650 230"
-                  className="w-full overflow-visible"
-                  preserveAspectRatio="none"
+                  viewBox="0 0 650 220"
+                  className="w-full"
+                  preserveAspectRatio="xMidYMid meet"
+                  role="img"
+                  aria-label="Biểu đồ đường thể hiện xu hướng GPA các học kỳ"
                 >
-                <defs>
-                  {/* Subtle Area Gradient under line */}
-                  <linearGradient
-                    id="gpaAreaGradient"
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="1"
-                  >
-                    <stop offset="0%" stopColor="#1488DB" stopOpacity="0.25" />
-                    <stop offset="85%" stopColor="#1488DB" stopOpacity="0.02" />
-                    <stop offset="100%" stopColor="#1488DB" stopOpacity="0.0" />
-                  </linearGradient>
+                  <defs>
+                    <linearGradient
+                      id="gpaAreaGradient"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop
+                        offset="0%"
+                        stopColor="#1488DB"
+                        stopOpacity="0.22"
+                      />
+                      <stop
+                        offset="85%"
+                        stopColor="#1488DB"
+                        stopOpacity="0.02"
+                      />
+                      <stop
+                        offset="100%"
+                        stopColor="#1488DB"
+                        stopOpacity="0.0"
+                      />
+                    </linearGradient>
 
-                  {/* Line Stroke Gradient */}
-                  <linearGradient
-                    id="gpaLineGradient"
-                    x1="0"
-                    y1="0"
-                    x2="1"
-                    y2="0"
-                  >
-                    <stop offset="0%" stopColor="#2563EB" />
-                    <stop offset="50%" stopColor="#1488DB" />
-                    <stop offset="100%" stopColor="#0284C7" />
-                  </linearGradient>
-                </defs>
+                    <linearGradient
+                      id="gpaLineGradient"
+                      x1="0"
+                      y1="0"
+                      x2="1"
+                      y2="0"
+                    >
+                      <stop offset="0%" stopColor="#2563EB" />
+                      <stop offset="50%" stopColor="#1488DB" />
+                      <stop offset="100%" stopColor="#0284C7" />
+                    </linearGradient>
+                  </defs>
 
-                {/* Horizontal Guide Lines (Scale 1.0 to 4.0) */}
-                <g className="stroke-slate-100" strokeWidth="1">
-                  {/* 4.0 */}
+                  {/* Horizontal Guide Lines (Scale 1.0 to 4.0) */}
+                  <g className="stroke-slate-100" strokeWidth="1">
+                    <line
+                      x1="52"
+                      y1="30"
+                      x2="615"
+                      y2="30"
+                      strokeDasharray="3 3"
+                    />
+                    <line
+                      x1="52"
+                      y1="76.7"
+                      x2="615"
+                      y2="76.7"
+                      strokeDasharray="3 3"
+                    />
+                    <line
+                      x1="52"
+                      y1="123.3"
+                      x2="615"
+                      y2="123.3"
+                      strokeDasharray="3 3"
+                    />
+                    <line
+                      x1="52"
+                      y1="170"
+                      x2="615"
+                      y2="170"
+                      stroke="#e2e8f0"
+                      strokeWidth="1.2"
+                    />
+                  </g>
+
+                  {/* Y-Axis Labels */}
+                  <g
+                    className="fill-slate-400 text-[10px] font-medium tabular-nums"
+                    textAnchor="end"
+                  >
+                    <text x="44" y="34">
+                      4.0
+                    </text>
+                    <text x="44" y="80">
+                      3.0
+                    </text>
+                    <text x="44" y="104">
+                      2.5
+                    </text>
+                    <text x="44" y="127">
+                      2.0
+                    </text>
+                    <text x="44" y="174">
+                      1.0
+                    </text>
+                  </g>
+
+                  {/* Benchmark Line (2.50 -> y = 100) */}
                   <line
                     x1="52"
-                    y1="30"
+                    y1="100"
                     x2="615"
-                    y2="30"
-                    strokeDasharray="3 3"
-                  />
-                  {/* 3.0 */}
-                  <line
-                    x1="52"
-                    y1="78"
-                    x2="615"
-                    y2="78"
-                    strokeDasharray="3 3"
-                  />
-                  {/* 2.0 */}
-                  <line
-                    x1="52"
-                    y1="127"
-                    x2="615"
-                    y2="127"
-                    strokeDasharray="3 3"
-                  />
-                  {/* Baseline 1.0 */}
-                  <line
-                    x1="52"
-                    y1="175"
-                    x2="615"
-                    y2="175"
-                    stroke="#e2e8f0"
+                    y2="100"
+                    stroke="#94a3b8"
                     strokeWidth="1.2"
+                    strokeDasharray="4 4"
                   />
-                </g>
 
-                {/* Y-Axis Labels */}
-                <g
-                  className="fill-slate-400 text-[10px] font-medium"
-                  textAnchor="end"
-                >
-                  <text x="46" y="34">
-                    4.0
-                  </text>
-                  <text x="46" y="82">
-                    3.0
-                  </text>
-                  <text x="46" y="106">
-                    2.5
-                  </text>
-                  <text x="46" y="131">
-                    2.0
-                  </text>
-                  <text x="46" y="179">
-                    1.0
-                  </text>
-                </g>
+                  {areaPath && <path d={areaPath} fill="url(#gpaAreaGradient)" />}
 
-                {/* Benchmark Line (Good Standing 2.50) at y=102.5 */}
-                <line
-                  x1="52"
-                  y1="102.5"
-                  x2="615"
-                  y2="102.5"
-                  stroke="#94a3b8"
-                  strokeWidth="1.2"
-                  strokeDasharray="4 4"
-                />
+                  {curvePath && (
+                    <path
+                      d={curvePath}
+                      fill="none"
+                      stroke="url(#gpaLineGradient)"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                    />
+                  )}
 
-                {/* Dynamic Area Fill for Completed Semesters */}
-                {areaPath && <path d={areaPath} fill="url(#gpaAreaGradient)" />}
+                  {inProgressPoint && latestCompletedPoint && (
+                    <line
+                      x1={latestCompletedPoint.x}
+                      y1={latestCompletedPoint.y}
+                      x2={inProgressPoint.x}
+                      y2={inProgressPoint.y}
+                      stroke="#1488DB"
+                      strokeWidth="2.5"
+                      strokeDasharray="5 5"
+                    />
+                  )}
 
-                {/* Dynamic Smooth Curve Line for Completed Semesters */}
-                {curvePath && (
-                  <path
-                    d={curvePath}
-                    fill="none"
-                    stroke="url(#gpaLineGradient)"
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                  />
-                )}
-
-                {/* Dashed Bridge Line extending to In-Progress Semester (e.g., HK261) */}
-                {inProgressPoint && latestCompletedPoint && (
-                  <line
-                    x1={latestCompletedPoint.x}
-                    y1={latestCompletedPoint.y}
-                    x2={inProgressPoint.x}
-                    y2={inProgressPoint.y}
-                    stroke="#1488DB"
-                    strokeWidth="2.5"
-                    strokeDasharray="5 5"
-                  />
-                )}
-
-                {/* Render Dynamic Data Points */}
-                {chartPoints.map((pt) => {
-                  if (pt.isInProgress) {
-                    return (
-                      <g key={pt.code}>
-                        {/* Hollow In-Progress Circle with pulsing halo */}
-                        <circle
-                          cx={pt.x}
-                          cy={pt.y}
-                          r={6}
-                          fill="#FFFFFF"
-                          stroke="#1488DB"
-                          strokeWidth="2.5"
-                        />
-                        <circle
-                          cx={pt.x}
-                          cy={pt.y}
-                          r={11}
-                          fill="none"
-                          stroke="#1488DB"
-                          strokeWidth="1.5"
-                          opacity="0.4"
-                        />
-                        {/* "In Progress" Badge above circle */}
-                        <g
-                          transform={`translate(${pt.x}, ${Math.max(22, pt.y - 25)})`}
-                          textAnchor="middle"
-                        >
-                          <rect
-                            x="-36"
-                            y="-16"
-                            width="72"
-                            height="20"
-                            rx="10"
-                            fill="#1488DB"
-                            className="shadow-sm"
+                  {chartPoints.map((pt) => {
+                    if (pt.isInProgress) {
+                      const pillX = Math.max(46, Math.min(604, pt.x));
+                      return (
+                        <g key={pt.code}>
+                          <circle
+                            cx={pt.x}
+                            cy={pt.y}
+                            r={5.5}
+                            fill="#FFFFFF"
+                            stroke="#1488DB"
+                            strokeWidth="2.5"
                           />
-                          <text
-                            x="0"
-                            y="-2"
-                            fill="#ffffff"
-                            fontSize="10"
-                            fontWeight="bold"
+                          <circle
+                            cx={pt.x}
+                            cy={pt.y}
+                            r={10}
+                            fill="none"
+                            stroke="#1488DB"
+                            strokeWidth="1.5"
+                            opacity="0.35"
+                          />
+                          <g
+                            transform={`translate(${pillX}, ${Math.max(22, pt.y - 22)})`}
+                            textAnchor="middle"
                           >
-                            In Progress
+                            <rect
+                              x="-34"
+                              y="-15"
+                              width="68"
+                              height="19"
+                              rx="9.5"
+                              fill="#1488DB"
+                            />
+                            <text
+                              x="0"
+                              y="-2"
+                              fill="#ffffff"
+                              fontSize="10"
+                              fontWeight="600"
+                            >
+                              Đang học
+                            </text>
+                          </g>
+
+                          <text
+                            x={pt.x}
+                            y={196}
+                            textAnchor="middle"
+                            className="fill-blue-700 text-[11px] font-bold"
+                          >
+                            {pt.code}
                           </text>
                         </g>
+                      );
+                    }
 
-                        {/* Pixel-perfect X-Axis Semester Label directly beneath dot */}
+                    const isLatestCompleted =
+                      latestCompletedPoint &&
+                      pt.code === latestCompletedPoint.code;
+
+                    return (
+                      <g key={pt.code}>
+                        <circle
+                          cx={pt.x}
+                          cy={pt.y}
+                          r={isLatestCompleted && !inProgressPoint ? 5.5 : 4.5}
+                          fill={
+                            isLatestCompleted && !inProgressPoint
+                              ? "#1488DB"
+                              : "#FFFFFF"
+                          }
+                          stroke={
+                            isLatestCompleted && !inProgressPoint
+                              ? "#FFFFFF"
+                              : "#2563EB"
+                          }
+                          strokeWidth={
+                            isLatestCompleted && !inProgressPoint ? 2 : 2.5
+                          }
+                        />
+
+                        {isLatestCompleted && !inProgressPoint && (
+                          <circle
+                            cx={pt.x}
+                            cy={pt.y}
+                            r={9.5}
+                            fill="none"
+                            stroke="#1488DB"
+                            strokeWidth="1.5"
+                            opacity="0.35"
+                          />
+                        )}
+
                         <text
                           x={pt.x}
-                          y={202}
+                          y={pt.y - 11}
+                          className="fill-slate-700 text-[11px] font-semibold tabular-nums"
                           textAnchor="middle"
-                          className="fill-blue-700 text-[11px] font-bold"
+                        >
+                          {pt.gpa.toFixed(2)}
+                        </text>
+
+                        <text
+                          x={pt.x}
+                          y={196}
+                          textAnchor="middle"
+                          className="fill-slate-600 text-[11px] font-medium"
                         >
                           {pt.code}
                         </text>
                       </g>
                     );
-                  }
-
-                  const isLatestCompleted =
-                    latestCompletedPoint &&
-                    pt.code === latestCompletedPoint.code;
-
-                  return (
-                    <g key={pt.code}>
-                      {/* Completed Point Circle */}
-                      <circle
-                        cx={pt.x}
-                        cy={pt.y}
-                        r={isLatestCompleted && !inProgressPoint ? 6 : 5}
-                        fill={
-                          isLatestCompleted && !inProgressPoint
-                            ? "#1488DB"
-                            : "#FFFFFF"
-                        }
-                        stroke={
-                          isLatestCompleted && !inProgressPoint
-                            ? "#FFFFFF"
-                            : "#2563EB"
-                        }
-                        strokeWidth={
-                          isLatestCompleted && !inProgressPoint ? 2 : 2.5
-                        }
-                      />
-
-                      {isLatestCompleted && !inProgressPoint && (
-                        <circle
-                          cx={pt.x}
-                          cy={pt.y}
-                          r={10}
-                          fill="none"
-                          stroke="#1488DB"
-                          strokeWidth="1.5"
-                          opacity="0.4"
-                        />
-                      )}
-
-                      {/* GPA Value Label above Circle */}
-                      <text
-                        x={pt.x}
-                        y={pt.y - 12}
-                        className="fill-slate-600 text-[11px] font-semibold"
-                        textAnchor="middle"
-                      >
-                        {pt.gpa.toFixed(2)}
-                      </text>
-
-                      {/* Pixel-perfect X-Axis Semester Label directly beneath dot */}
-                      <text
-                        x={pt.x}
-                        y={202}
-                        textAnchor="middle"
-                        className="fill-slate-600 text-[11px] font-semibold"
-                      >
-                        {pt.code}
-                      </text>
-                    </g>
-                  );
-                })}
-              </svg>
-            </div>
-          )}
+                  })}
+                </svg>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Right Column (col-span-1): Registered Courses in Semester HK261 */}
-        <Card className="flex flex-col justify-between border-slate-200 bg-white shadow-xs">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg font-bold text-slate-900">
-                Registered Courses
+        {/* Right Column (col-span-1): Registered Courses */}
+        <Card className="flex flex-col border-slate-200 bg-white shadow-xs">
+          <CardHeader className="border-b border-slate-100 pb-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-base font-bold text-slate-900">
+                Học phần đang học
               </CardTitle>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 cursor-pointer gap-1.5 border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-blue-700"
-                  onClick={() => navigate("/student/advising")}
-                >
-                  <UserCheck className="h-3.5 w-3.5 text-blue-600" />
-                  <span>Cố vấn Học vụ</span>
-                  <ArrowRight className="h-3 w-3 text-slate-400" />
-                </Button>
-                <Badge
-                  variant="outline"
-                  className="border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700"
-                >
-                  {isLoadingCourses
-                    ? "Loading..."
-                    : isGraduated
-                      ? "Graduated"
-                      : `${activeCurrentCourses.length} ${
-                          activeCurrentCourses.length === 1
-                            ? "Course"
-                            : "Courses"
-                        }`}
-                </Badge>
-              </div>
+              <Badge
+                variant="outline"
+                className="border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 tabular-nums"
+              >
+                {isLoadingCourses
+                  ? "Đang tải..."
+                  : isGraduated
+                    ? "Hoàn thành"
+                    : `${activeCurrentCourses.length} môn`}
+              </Badge>
             </div>
             <CardDescription className="text-xs text-slate-500">
-              {activeSemesterLabel} • Active Enrollment
+              {activeSemesterLabel}
             </CardDescription>
           </CardHeader>
 
-          <CardContent className="space-y-3 pt-1">
+          <CardContent className="flex-1 p-0">
             {isLoadingCourses ? (
-              <div className="space-y-3 py-2">
+              <div className="divide-y divide-slate-100">
                 {[1, 2, 3].map((i) => (
-                  <div
-                    key={i}
-                    className="animate-pulse rounded-lg border border-slate-100 bg-slate-50/70 p-3.5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1.5">
-                        <div className="h-4 w-28 rounded bg-slate-200" />
-                        <div className="h-3 w-44 rounded bg-slate-200" />
-                      </div>
-                      <div className="h-7 w-20 rounded bg-slate-200" />
-                    </div>
+                  <div key={i} className="space-y-2 px-5 py-3.5">
+                    <Skeleton className="h-4 w-28 bg-slate-100" />
+                    <Skeleton className="h-3.5 w-48 bg-slate-100" />
+                    <Skeleton className="h-3 w-36 bg-slate-100" />
                   </div>
                 ))}
               </div>
             ) : isGraduated ? (
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                  <GraduationCap className="h-6 w-6" />
-                </div>
+              <div className="flex flex-col items-center justify-center px-5 py-10 text-center">
+                <GraduationCap
+                  className="mb-2.5 h-8 w-8 text-emerald-600"
+                  aria-hidden="true"
+                />
                 <p className="text-sm font-semibold text-slate-800">
-                  Degree Completed
+                  Đã hoàn thành chương trình
                 </p>
                 <p className="mt-1 max-w-xs text-xs text-slate-500">
-                  This student has graduated ({graduateSemester}) and has no
-                  active course registrations for the current semester.
+                  Sinh viên đã tốt nghiệp ({graduateSemester}) nên không có môn
+                  đăng ký trong học kỳ hiện tại.
                 </p>
               </div>
             ) : activeCurrentCourses.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500">
-                  <BookOpen className="h-6 w-6" />
-                </div>
+              <div className="flex flex-col items-center justify-center px-5 py-10 text-center">
+                <BookOpen
+                  className="mb-2.5 h-8 w-8 text-slate-300"
+                  aria-hidden="true"
+                />
                 <p className="text-sm font-semibold text-slate-800">
-                  No Registered Courses
+                  Chưa có học phần đăng ký
                 </p>
                 <p className="mt-1 max-w-xs text-xs text-slate-500">
-                  No courses registered in the current semester for this student.
+                  Chưa ghi nhận môn học nào trong học kỳ hiện tại.
                 </p>
               </div>
             ) : (
-              <div className="max-h-95 space-y-3 overflow-y-auto pr-1">
+              <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
                 {activeCurrentCourses.map((course) => {
+                  const metadataParts = [`${course.credits} TC`];
+                  if (course.class_group) {
+                    metadataParts.push(`Nhóm ${course.class_group}`);
+                  }
+                  if (course.lecturer_name) {
+                    metadataParts.push(course.lecturer_name);
+                  }
+
                   return (
-                    <div
+                    <li
                       key={course.class_id || course.course_code}
-                      className="rounded-lg border border-slate-100 bg-slate-50/70 p-3.5 transition-colors hover:bg-slate-50"
+                      className="flex items-start justify-between gap-3 px-5 py-3.5 transition-colors hover:bg-slate-50/70"
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-1.5">
-                        <div className="flex flex-wrap items-center gap-1.5">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
                           <span className="font-mono text-xs font-bold text-slate-900">
                             {course.course_code}
                           </span>
-                          {course.class_group && (
-                            <Badge
-                              variant="outline"
-                              className="h-4.5 border-slate-200 bg-white px-1.5 text-[10px] font-medium text-slate-600"
-                            >
-                              Group {course.class_group}
-                            </Badge>
-                          )}
-                          <Badge
-                            variant="secondary"
-                            className="h-4.5 border border-blue-100 bg-blue-50 px-1.5 text-[10px] font-medium text-blue-700"
-                          >
-                            {course.credits}{" "}
-                            {course.credits === 1 ? "credit" : "credits"}
-                          </Badge>
                           {course.retaken && (
                             <Badge
                               variant="outline"
-                              className="h-4.5 border-amber-200 bg-amber-50 px-1.5 text-[10px] font-semibold text-amber-700"
+                              className="h-4.5 border-amber-200 bg-amber-50 px-1.5 text-[10px] font-semibold text-amber-800"
                             >
-                              Retaken
+                              Học lại
                             </Badge>
                           )}
                         </div>
+                        <p className="truncate text-xs font-medium text-slate-800">
+                          {course.course_name}
+                        </p>
+                        <p className="truncate text-[11px] text-slate-500">
+                          {metadataParts.join(" · ")}
+                        </p>
                       </div>
 
-                      <p className="mt-1.5 text-xs font-semibold text-slate-800">
-                        {course.course_name}
-                      </p>
-
-                      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[11px] text-slate-500">
-                        {course.lecturer_name ? (
-                          <div className="flex items-center gap-1.5">
-                            <User className="h-3 w-3 shrink-0 text-slate-400" />
-                            <span className="truncate max-w-40">
-                              {course.lecturer_name}
-                            </span>
-                          </div>
-                        ) : (
-                          <div />
-                        )}
-
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-5 cursor-pointer px-1.5 text-[10px] font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-                          onClick={() =>
-                            navigate(
-                              `/student/simulation?course=${course.course_code}`
-                            )
-                          }
-                        >
-                          Simulate &rarr;
-                        </Button>
-                      </div>
-                    </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 shrink-0 cursor-pointer gap-1 px-2 text-xs font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                        onClick={() =>
+                          navigate(
+                            `/student/simulation?course=${course.course_code}`,
+                          )
+                        }
+                      >
+                        <span>Dự báo</span>
+                        <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                      </Button>
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* 4. Featured Action (Bottom Row - Full Width Brand Blue Card) */}
-      <div className="relative overflow-hidden rounded-2xl bg-linear-to-r from-blue-700 via-blue-600 to-indigo-700 p-6 text-white shadow-lg md:p-8">
-        {/* Decorative background glow circles */}
-        <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
-        <div className="pointer-events-none absolute right-1/4 -bottom-24 h-48 w-48 rounded-full bg-blue-400/20 blur-xl" />
-
-        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="max-w-2xl space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold text-white backdrop-blur-xs">
-                <Sparkles className="h-3.5 w-3.5" />
-                XAI Simulator
-              </span>
-              <span className="text-xs text-blue-100 font-medium">
-                Transparent Explainable Insights
-              </span>
-            </div>
-
-            <h2 className="font-heading text-xl font-bold tracking-tight text-white sm:text-2xl">
-              Explore your academic future with XAI
-            </h2>
-
-            <p className="text-sm leading-relaxed text-blue-50/90 sm:text-base">
-              Test different grades and scenarios to understand what could
-              improve your academic performance — with transparent AI
-              explanations at every step.
-            </p>
+      {/* 5. Primary Action Callout (XAI Simulation) */}
+      <section className="flex flex-col gap-4 rounded-xl border border-blue-200/80 bg-blue-50/60 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="max-w-2xl space-y-1">
+          <div className="flex items-center gap-2 text-sm font-bold text-slate-900 sm:text-base">
+            <Sparkles className="h-4 w-4 text-blue-600" aria-hidden="true" />
+            <span>Mô phỏng kết quả học tập với XAI</span>
           </div>
-
-          <div className="shrink-0">
-            <Button
-              size="lg"
-              className="group cursor-pointer rounded-xl bg-white px-6 py-3 font-semibold text-blue-700 shadow-md transition-all hover:bg-blue-50 hover:shadow-lg active:scale-95"
-              onClick={() => navigate("/student/simulation")}
-            >
-              <span>Launch Simulator</span>
-              <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </Button>
-          </div>
+          <p className="text-xs leading-relaxed text-slate-600 sm:text-sm">
+            Thử nghiệm kịch bản điểm số cho các môn đang học để xem tác động lên
+            GPA tích lũy và nhận giải thích minh bạch từ hệ thống.
+          </p>
         </div>
-      </div>
+
+        <Button
+          onClick={() => navigate("/student/simulation")}
+          className="h-10 w-fit shrink-0 cursor-pointer gap-2 bg-blue-600 px-5 text-sm font-semibold text-white shadow-xs hover:bg-blue-700"
+        >
+          <span>Mở Trình Dự báo</span>
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      </section>
     </div>
   );
 };

@@ -1,16 +1,3 @@
-import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,12 +13,6 @@ import { formatFeatureName } from "@/lib/shap-features";
 import { cn } from "@/lib/utils";
 import type { ClassPrediction } from "@/types";
 import {
-  useLecturerCurrentClasses,
-  useActiveSemester,
-  useAllClassesEnrollments,
-  useAllClassesPredictions,
-} from "../api/lecturer-api";
-import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
@@ -42,6 +23,25 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
+import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
+  useActiveSemester,
+  useAllClassesEnrollments,
+  useAllClassesPredictions,
+  useLecturerCurrentClasses,
+} from "../api/lecturer-api";
 
 const GRADE_ORDER = ["A+", "A", "B+", "B", "C+", "C", "D+", "D", "F"];
 const GRADE_COLORS: Record<string, string> = {
@@ -114,15 +114,15 @@ export const LecturerDashboardPage = () => {
 
   // Aggregated AI vs Heuristic KPI Metrics
   const kpis = useMemo(() => {
-    const totalStudents =
-      hasAiData
-        ? classPredictions.reduce(
-            (sum, cp) => sum + (cp.analytics?.total_students ?? cp.students.length),
-            0,
-          )
-        : allEnrollments.length > 0
-          ? allEnrollments.length
-          : classes.reduce((acc, c) => acc + (c.total_students || 0), 0);
+    const totalStudents = hasAiData
+      ? classPredictions.reduce(
+          (sum, cp) =>
+            sum + (cp.analytics?.total_students ?? cp.students.length),
+          0,
+        )
+      : allEnrollments.length > 0
+        ? allEnrollments.length
+        : classes.reduce((acc, c) => acc + (c.total_students || 0), 0);
 
     if (hasAiData) {
       let high = 0;
@@ -234,7 +234,11 @@ export const LecturerDashboardPage = () => {
       const items: RiskRadarItem[] = [];
       for (const cp of classPredictions) {
         for (const s of cp.students) {
-          if (s.risk_level === "HIGH" || s.is_at_risk || s.risk_level === "MEDIUM") {
+          if (
+            s.risk_level === "HIGH" ||
+            s.is_at_risk ||
+            s.risk_level === "MEDIUM"
+          ) {
             const topShap = s.top_shap_factors?.[0];
             items.push({
               key: `${cp.class_id}-${s.student_id}`,
@@ -268,7 +272,9 @@ export const LecturerDashboardPage = () => {
         courseCode: item.course_code,
         classId: item.class_id,
         failProbability:
-          item.giua_ky !== null ? Math.max(0.65, (10 - item.giua_ky) / 10) : 0.6,
+          item.giua_ky !== null
+            ? Math.max(0.65, (10 - item.giua_ky) / 10)
+            : 0.6,
         riskLevel: "HIGH" as const,
         reason:
           item.giua_ky !== null
@@ -548,14 +554,21 @@ export const LecturerDashboardPage = () => {
                         tick={{ fontSize: 11, fill: "#475569" }}
                       />
                       <Tooltip
-                        formatter={(value) => [`${String(value)} sinh viên`, "Số lượng"]}
+                        formatter={(value) => [
+                          `${String(value)} sinh viên`,
+                          "Số lượng",
+                        ]}
                         contentStyle={{
                           fontSize: "12px",
                           borderRadius: "8px",
                           border: "1px solid #e2e8f0",
                         }}
                       />
-                      <Bar dataKey="count" name="Số sinh viên" radius={[6, 6, 0, 0]}>
+                      <Bar
+                        dataKey="count"
+                        name="Số sinh viên"
+                        radius={[6, 6, 0, 0]}
+                      >
                         {gradeDistributionData.map((entry) => (
                           <Cell key={entry.grade} fill={entry.fill} />
                         ))}
@@ -639,7 +652,9 @@ export const LecturerDashboardPage = () => {
                           </Badge>
                           {highCount !== undefined && (
                             <Badge
-                              variant={highCount > 0 ? "destructive" : "outline"}
+                              variant={
+                                highCount > 0 ? "destructive" : "outline"
+                              }
                               className={cn(
                                 "text-[10px]",
                                 highCount === 0 &&
@@ -690,7 +705,9 @@ export const LecturerDashboardPage = () => {
                 Early Risk Radar
               </CardTitle>
               <Badge
-                variant={riskRadarStudents.length > 0 ? "destructive" : "outline"}
+                variant={
+                  riskRadarStudents.length > 0 ? "destructive" : "outline"
+                }
                 className="text-[11px] font-medium"
               >
                 {riskRadarStudents.length} Cảnh báo
