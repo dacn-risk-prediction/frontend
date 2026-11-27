@@ -267,13 +267,13 @@ export const AdminSemestersPage = () => {
                           sem.is_active && "bg-blue-50/30",
                         )}
                       >
-                        <td className="px-4 py-3 font-mono text-xs font-bold text-slate-900">
+                        <td className="px-4 py-3 font-mono text-xs font-bold text-slate-900 tabular-nums">
                           {sem.semester_code}
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-700">
+                        <td className="px-4 py-3 text-xs text-slate-700 tabular-nums">
                           {sem.academic_year}
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-700">
+                        <td className="px-4 py-3 text-xs text-slate-700 tabular-nums">
                           Học kỳ {sem.term}
                         </td>
                         <td className="px-4 py-3 text-xs">
@@ -286,7 +286,7 @@ export const AdminSemestersPage = () => {
                               <Badge
                                 variant="outline"
                                 className={cn(
-                                  "text-[10px] font-semibold",
+                                  "text-xs font-semibold",
                                   isExpired
                                     ? "border-slate-200 bg-slate-100 text-slate-600"
                                     : "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -301,14 +301,14 @@ export const AdminSemestersPage = () => {
                         </td>
                         <td className="px-4 py-3">
                           {sem.is_active ? (
-                            <Badge className="bg-emerald-600 text-[11px] font-semibold text-white">
+                            <Badge className="bg-emerald-600 text-xs font-semibold text-white">
                               <CheckCircle2 className="mr-1 h-3 w-3" />
                               Đang hoạt động
                             </Badge>
                           ) : (
                             <Badge
                               variant="outline"
-                              className="border-slate-200 bg-slate-50 text-[11px] text-slate-500"
+                              className="border-slate-200 bg-slate-50 text-xs text-slate-500"
                             >
                               Đã lưu trữ
                             </Badge>
@@ -322,7 +322,7 @@ export const AdminSemestersPage = () => {
                                 variant="outline"
                                 disabled={switchActiveMutation.isPending}
                                 onClick={() => void handleSetActive(sem)}
-                                className="h-7 cursor-pointer border-blue-200 bg-blue-50/50 px-2.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                                className="h-7 cursor-pointer border-blue-200 bg-blue-50/50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
                               >
                                 Đặt hiện hành
                               </Button>
@@ -391,7 +391,7 @@ export const AdminSemestersPage = () => {
                     className="h-9 text-xs"
                   />
                   {form.formState.errors.semester_code && (
-                    <p className="text-[11px] text-rose-600">
+                    <p className="text-xs text-rose-600">
                       {form.formState.errors.semester_code.message}
                     </p>
                   )}
@@ -405,7 +405,7 @@ export const AdminSemestersPage = () => {
                     className="h-9 text-xs"
                   />
                   {form.formState.errors.academic_year && (
-                    <p className="text-[11px] text-rose-600">
+                    <p className="text-xs text-rose-600">
                       {form.formState.errors.academic_year.message}
                     </p>
                   )}
@@ -423,7 +423,7 @@ export const AdminSemestersPage = () => {
                     className="h-9 text-xs"
                   />
                   {form.formState.errors.term && (
-                    <p className="text-[11px] text-rose-600">
+                    <p className="text-xs text-rose-600">
                       {form.formState.errors.term.message}
                     </p>
                   )}

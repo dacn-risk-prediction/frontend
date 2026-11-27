@@ -405,7 +405,7 @@ export const AdminAcademicsPage = () => {
                         <td className="px-4 py-2.5">
                           <Badge
                             variant="secondary"
-                            className="bg-blue-50 text-[11px] font-semibold text-blue-700"
+                            className="bg-blue-50 text-xs font-semibold text-blue-700"
                           >
                             {course.credits} TC
                           </Badge>
@@ -612,7 +612,7 @@ export const AdminAcademicsPage = () => {
                         </span>
                         <Badge
                           variant="outline"
-                          className="text-[10px] font-semibold"
+                          className="text-xs font-semibold"
                         >
                           {cur.cohort}
                         </Badge>
@@ -620,7 +620,7 @@ export const AdminAcademicsPage = () => {
                       <p className="mt-1 text-xs font-semibold text-slate-800">
                         {cur.curriculum_name}
                       </p>
-                      <p className="mt-0.5 text-[11px] text-slate-500">
+                      <p className="mt-0.5 text-xs text-slate-500">
                         {cur.major_name} • {cur.total_credits ?? 128} tín chỉ
                       </p>
                     </button>
@@ -663,14 +663,14 @@ export const AdminAcademicsPage = () => {
                           {block.blockName}
                         </p>
                         {block.category && (
-                          <p className="text-[11px] text-slate-500">
+                          <p className="text-xs text-slate-500">
                             Phân loại: {block.category}
                           </p>
                         )}
                       </div>
                       <Badge
                         variant="outline"
-                        className="bg-white text-[11px] font-semibold text-blue-700 border-blue-200"
+                        className="bg-white text-xs font-semibold text-blue-700 border-blue-200"
                       >
                         {block.items.length} môn
                         {block.requiredCredits !== null
@@ -698,13 +698,13 @@ export const AdminAcademicsPage = () => {
                               {item.course_type && (
                                 <Badge
                                   variant="secondary"
-                                  className="text-[10px]"
+                                  className="text-xs"
                                 >
                                   {item.course_type}
                                 </Badge>
                               )}
                             </div>
-                            <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                            <div className="flex items-center gap-3 text-xs text-slate-500">
                               {item.recommended_semester && (
                                 <span>Đề xuất: {item.recommended_semester}</span>
                               )}
@@ -756,7 +756,7 @@ export const AdminAcademicsPage = () => {
                   className="h-9 text-xs"
                 />
                 {courseForm.formState.errors.course_code && (
-                  <p className="text-[11px] text-rose-600">
+                  <p className="text-xs text-rose-600">
                     {courseForm.formState.errors.course_code.message}
                   </p>
                 )}
@@ -769,7 +769,7 @@ export const AdminAcademicsPage = () => {
                   className="h-9 text-xs"
                 />
                 {courseForm.formState.errors.course_name && (
-                  <p className="text-[11px] text-rose-600">
+                  <p className="text-xs text-rose-600">
                     {courseForm.formState.errors.course_name.message}
                   </p>
                 )}
@@ -784,7 +784,7 @@ export const AdminAcademicsPage = () => {
                   className="h-9 text-xs"
                 />
                 {courseForm.formState.errors.credits && (
-                  <p className="text-[11px] text-rose-600">
+                  <p className="text-xs text-rose-600">
                     {courseForm.formState.errors.credits.message}
                   </p>
                 )}
@@ -851,7 +851,7 @@ export const AdminAcademicsPage = () => {
                     className="h-9 text-xs"
                   />
                   {classForm.formState.errors.class_id && (
-                    <p className="text-[11px] text-rose-600">
+                    <p className="text-xs text-rose-600">
                       {classForm.formState.errors.class_id.message}
                     </p>
                   )}
@@ -864,7 +864,7 @@ export const AdminAcademicsPage = () => {
                     className="h-9 text-xs"
                   />
                   {classForm.formState.errors.class_group && (
-                    <p className="text-[11px] text-rose-600">
+                    <p className="text-xs text-rose-600">
                       {classForm.formState.errors.class_group.message}
                     </p>
                   )}

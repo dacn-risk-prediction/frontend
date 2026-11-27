@@ -742,7 +742,7 @@ export const StudentAdvisingPage = () => {
                 </div>
                 <Badge
                   variant="secondary"
-                  className="text-[11px] font-semibold text-slate-600"
+                  className="text-xs font-semibold text-slate-600"
                 >
                   {advisors.length} Mục
                 </Badge>
@@ -841,19 +841,19 @@ export const StudentAdvisingPage = () => {
                             </span>
                             <div className="flex items-center gap-1 shrink-0">
                               {unreadCount > 0 && (
-                                <Badge className="bg-rose-600 px-1.5 py-0 text-[10px] font-bold text-white">
+                                <Badge className="bg-rose-600 px-1.5 py-0 text-xs font-bold text-white">
                                   {unreadCount} mới
                                 </Badge>
                               )}
                               {advisor.isFacultyAdvisor ? (
-                                <Badge className="bg-blue-100 text-[10px] font-semibold text-blue-700 hover:bg-blue-100">
+                                <Badge className="bg-blue-100 text-xs font-semibold text-blue-700 hover:bg-blue-100">
                                   Văn phòng Khoa
                                 </Badge>
                               ) : (
                                 advisor.courseCode && (
                                   <Badge
                                     variant="outline"
-                                    className="font-mono text-[10px] font-bold text-slate-700 border-slate-200"
+                                    className="font-mono text-xs font-bold text-slate-700 border-slate-200"
                                   >
                                     {advisor.courseCode}
                                   </Badge>
@@ -862,14 +862,14 @@ export const StudentAdvisingPage = () => {
                             </div>
                           </div>
 
-                          <p className="mt-0.5 truncate text-[11px] text-slate-600 font-medium">
+                          <p className="mt-0.5 truncate text-xs text-slate-600 font-medium">
                             {advisor.courseName || advisor.department}
                           </p>
                         </div>
                       </div>
 
                       {/* Course specific metadata or Advisor hours */}
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px] text-slate-500">
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs text-slate-500">
                         <span className="flex items-center gap-1 truncate">
                           <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
                           <span className="truncate">
@@ -880,7 +880,7 @@ export const StudentAdvisingPage = () => {
                         {isRisk && (
                           <Badge
                             className={cn(
-                              "text-[10px] font-semibold shrink-0 gap-1",
+                              "text-xs font-semibold shrink-0 gap-1",
                               advisor.riskLevel === "HIGH"
                                 ? "bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200"
                                 : "bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-200",
@@ -895,7 +895,7 @@ export const StudentAdvisingPage = () => {
                         {!isRisk &&
                           !advisor.isFacultyAdvisor &&
                           advisor.riskLevel === "LOW" && (
-                            <Badge className="bg-emerald-100 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 shrink-0 gap-1">
+                            <Badge className="bg-emerald-100 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 shrink-0 gap-1">
                               <ShieldCheck className="h-2.5 w-2.5" />
                               An toàn
                             </Badge>
@@ -916,7 +916,7 @@ export const StudentAdvisingPage = () => {
                 <h4 className="text-xs font-bold text-blue-900">
                   Hướng dẫn Tư vấn Học vụ
                 </h4>
-                <p className="text-[11px] leading-relaxed text-blue-800/80">
+                <p className="text-xs leading-relaxed text-blue-800/80">
                   Chọn Giảng viên phụ trách môn học ở danh bạ để trao đổi trực
                   tiếp, đặt lịch hẹn tư vấn hoặc theo dõi nhiệm vụ cải thiện được giao.
                 </p>
@@ -1041,7 +1041,7 @@ export const StudentAdvisingPage = () => {
                   <span>Hộp thư Trao đổi</span>
                   <Badge
                     variant="secondary"
-                    className="text-[10px] font-semibold ml-1"
+                    className="text-xs font-semibold ml-1"
                   >
                     {currentAdvisorMessages.length}
                   </Badge>
@@ -1081,7 +1081,7 @@ export const StudentAdvisingPage = () => {
                   <span>Kế hoạch Hành động</span>
                   <Badge
                     variant="secondary"
-                    className="text-[10px] font-semibold ml-1"
+                    className="text-xs font-semibold ml-1"
                   >
                     {currentAdvisorTasks.filter((t) => !t.completed).length} việc
                   </Badge>
@@ -1136,7 +1136,7 @@ export const StudentAdvisingPage = () => {
                       Gửi Yêu cầu Hỗ trợ Nhanh (Quick Requests)
                     </CardTitle>
                   </div>
-                  <CardDescription className="text-[11px] text-slate-500">
+                  <CardDescription className="text-xs text-slate-500">
                     Bấm để gửi yêu cầu mẫu trực tiếp tới {selectedAdvisor.name}:
                   </CardDescription>
                 </CardHeader>
@@ -1197,7 +1197,7 @@ export const StudentAdvisingPage = () => {
                           variant="outline"
                           disabled={markSessionReadMutation.isPending}
                           onClick={() => markSessionReadMutation.mutate(activeSessionId)}
-                          className="h-7 border-blue-200 bg-blue-50 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 cursor-pointer gap-1"
+                          className="h-7 border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 hover:bg-blue-100 cursor-pointer gap-1"
                         >
                           <CheckCheck className="h-3.5 w-3.5" />
                           <span>
@@ -1205,7 +1205,7 @@ export const StudentAdvisingPage = () => {
                           </span>
                         </Button>
                       )}
-                      <span className="text-[11px] text-slate-400">
+                      <span className="text-xs text-slate-400">
                         Đối thoại với {selectedAdvisor.name}
                       </span>
                     </div>
@@ -1227,7 +1227,7 @@ export const StudentAdvisingPage = () => {
                           Chưa có tin nhắn nào cho môn{" "}
                           {selectedAdvisor.courseCode}.
                         </p>
-                        <p className="text-[11px] text-slate-400 mt-1">
+                        <p className="text-xs text-slate-400 mt-1">
                           Em có thể chọn một Yêu cầu Nhanh ở trên hoặc nhập câu
                           hỏi bên dưới để bắt đầu phiên cố vấn.
                         </p>
@@ -1249,7 +1249,7 @@ export const StudentAdvisingPage = () => {
                             <Avatar className="h-7 w-7 mt-0.5 shrink-0">
                               <AvatarFallback
                                 className={cn(
-                                  "text-[10px] font-bold text-white",
+                                  "text-xs font-bold text-white",
                                   isStudent ? "bg-blue-600" : "bg-slate-800",
                                 )}
                               >
@@ -1272,7 +1272,7 @@ export const StudentAdvisingPage = () => {
                               </div>
                               <div
                                 className={cn(
-                                  "text-[10px] text-slate-400 px-1",
+                                  "text-xs text-slate-400 px-1",
                                   isStudent ? "text-right" : "text-left",
                                 )}
                               >
@@ -1546,35 +1546,35 @@ export const StudentAdvisingPage = () => {
                                     {apt.subject}
                                   </span>
                                   {apt.status === "CONFIRMED" && (
-                                    <Badge className="bg-emerald-100 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 border-emerald-200">
+                                    <Badge className="bg-emerald-100 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 border-emerald-200">
                                       <CheckCircle2 className="mr-1 h-3 w-3" /> Đã
                                       xác nhận
                                     </Badge>
                                   )}
                                   {apt.status === "PENDING" &&
                                     (canStudentConfirm ? (
-                                      <Badge className="bg-amber-100 text-[10px] font-semibold text-amber-800 hover:bg-amber-100 border-amber-300">
+                                      <Badge className="bg-amber-100 text-xs font-semibold text-amber-800 hover:bg-amber-100 border-amber-300">
                                         <Clock className="mr-1 h-3 w-3" /> Chờ bạn
                                         xác nhận
                                       </Badge>
                                     ) : (
-                                      <Badge className="bg-slate-100 text-[10px] font-semibold text-slate-700 hover:bg-slate-100 border-slate-200">
+                                      <Badge className="bg-slate-100 text-xs font-semibold text-slate-700 hover:bg-slate-100 border-slate-200">
                                         <Clock className="mr-1 h-3 w-3" /> Đang
                                         chờ Thầy/Cô xác nhận
                                       </Badge>
                                     ))}
                                   {apt.status === "COMPLETED" && (
-                                    <Badge className="bg-blue-100 text-[10px] font-semibold text-blue-700 hover:bg-blue-100 border-blue-200">
+                                    <Badge className="bg-blue-100 text-xs font-semibold text-blue-700 hover:bg-blue-100 border-blue-200">
                                       <CheckCircle2 className="mr-1 h-3 w-3" /> Đã
                                       hoàn thành
                                     </Badge>
                                   )}
                                   {apt.status === "CANCELLED" && (
-                                    <Badge className="bg-slate-100 text-[10px] font-semibold text-slate-600 hover:bg-slate-100 border-slate-200">
+                                    <Badge className="bg-slate-100 text-xs font-semibold text-slate-600 hover:bg-slate-100 border-slate-200">
                                       <XCircle className="mr-1 h-3 w-3" /> Đã hủy
                                     </Badge>
                                   )}
-                                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-500">
                                     {isCreatedByStudent
                                       ? "Do bạn đặt"
                                       : "Lời mời từ Giảng viên"}
@@ -1588,7 +1588,7 @@ export const StudentAdvisingPage = () => {
                                   </span>
                                 </p>
 
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-[11px] text-slate-500">
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs text-slate-500">
                                   <span className="flex items-center gap-1 font-medium text-blue-700">
                                     <Clock className="h-3 w-3" /> {apt.timeSlot}
                                   </span>
@@ -1598,7 +1598,7 @@ export const StudentAdvisingPage = () => {
                                 </div>
 
                                 {apt.notes && (
-                                  <p className="text-[11px] text-slate-500 italic pt-1">
+                                  <p className="text-xs text-slate-500 italic pt-1">
                                     Ghi chú: {apt.notes}
                                   </p>
                                 )}
@@ -1694,7 +1694,7 @@ export const StudentAdvisingPage = () => {
                   <h4 className="text-xs font-bold text-slate-900">
                     Danh sách Nhiệm vụ Được giao ({currentAdvisorTasks.length})
                   </h4>
-                  <span className="text-[11px] text-slate-500">
+                  <span className="text-xs text-slate-500">
                     Tích chọn để đồng bộ tiến độ với Giảng viên
                   </span>
                 </div>
@@ -1711,7 +1711,7 @@ export const StudentAdvisingPage = () => {
                       Chưa có nhiệm vụ cải thiện nào được giảng viên giao cho
                       môn {selectedAdvisor.courseCode}.
                     </p>
-                    <p className="text-[11px] text-slate-400 mt-1">
+                    <p className="text-xs text-slate-400 mt-1">
                       Khi giảng viên tạo đầu việc can thiệp trên hệ thống, danh
                       sách sẽ tự động hiển thị tại đây.
                     </p>
@@ -1765,11 +1765,11 @@ export const StudentAdvisingPage = () => {
                               {task.title}
                             </span>
                             {task.description && (
-                              <p className="text-[11px] text-slate-500 leading-relaxed">
+                              <p className="text-xs text-slate-500 leading-relaxed">
                                 {task.description}
                               </p>
                             )}
-                            <div className="flex items-center gap-2 pt-1 text-[10px] text-slate-400">
+                            <div className="flex items-center gap-2 pt-1 text-xs text-slate-400">
                               <Clock className="h-3 w-3" />
                               <span>{task.deadline}</span>
                             </div>
@@ -1778,7 +1778,7 @@ export const StudentAdvisingPage = () => {
 
                         <Badge
                           className={cn(
-                            "text-[10px] font-semibold shrink-0",
+                            "text-xs font-semibold shrink-0",
                             task.priority === "HIGH" &&
                               "bg-blue-100 text-blue-800 hover:bg-blue-100",
                             task.priority === "MEDIUM" &&

@@ -320,7 +320,7 @@ export const LecturerClassesPage = () => {
     return orderedKeys.map((grade) => ({
       grade,
       count: dist[grade] ?? 0,
-      fill: GRADE_COLORS[grade] ?? "#2563eb",
+      fill: GRADE_COLORS[grade] ?? "#1488db",
     }));
   }, [classPrediction]);
 
@@ -364,7 +364,7 @@ export const LecturerClassesPage = () => {
             <div className="font-mono font-bold text-slate-900 leading-tight">
               {row.original.student_id}
             </div>
-            <div className="text-[11px] text-slate-600 truncate max-w-36">
+            <div className="text-xs text-slate-600 truncate max-w-36">
               {row.original.student_name}
             </div>
           </div>
@@ -378,12 +378,12 @@ export const LecturerClassesPage = () => {
           row.original.retaken ? (
             <Badge
               variant="outline"
-              className="border-amber-200 bg-amber-50 text-amber-700 text-[10px]"
+              className="border-amber-200 bg-amber-50 text-amber-700 text-xs"
             >
               Học lại
             </Badge>
           ) : (
-            <span className="text-slate-400 text-[11px]">Chính quy</span>
+            <span className="text-slate-400 text-xs">Chính quy</span>
           ),
       },
       {
@@ -430,7 +430,7 @@ export const LecturerClassesPage = () => {
           const isMedium = s.risk_level === "MEDIUM";
           return (
             <div className="w-28 space-y-1">
-              <div className="flex justify-between text-[11px]">
+              <div className="flex justify-between text-xs">
                 <span
                   className={cn(
                     "font-bold font-mono",
@@ -469,7 +469,7 @@ export const LecturerClassesPage = () => {
             return (
               <Badge
                 variant="destructive"
-                className="text-[10px] px-1.5 py-0 font-semibold"
+                className="text-xs px-1.5 py-0 font-semibold"
               >
                 Nguy cơ cao
               </Badge>
@@ -479,7 +479,7 @@ export const LecturerClassesPage = () => {
             return (
               <Badge
                 variant="outline"
-                className="border-amber-300 bg-amber-50 text-amber-700 text-[10px] px-1.5 py-0 font-semibold"
+                className="border-amber-300 bg-amber-50 text-amber-700 text-xs px-1.5 py-0 font-semibold"
               >
                 Cần chú ý
               </Badge>
@@ -488,7 +488,7 @@ export const LecturerClassesPage = () => {
           return (
             <Badge
               variant="outline"
-              className="border-emerald-300 bg-emerald-50 text-emerald-700 text-[10px] px-1.5 py-0 font-semibold"
+              className="border-emerald-300 bg-emerald-50 text-emerald-700 text-xs px-1.5 py-0 font-semibold"
             >
               An toàn
             </Badge>
@@ -514,7 +514,7 @@ export const LecturerClassesPage = () => {
                 ? row.original.predicted_score10.toFixed(1)
                 : "—"}
             </div>
-            <div className="text-[10px] text-slate-500 font-medium">
+            <div className="text-xs text-slate-500 font-medium">
               Xếp loại:{" "}
               <span className="font-bold text-blue-700">
                 {row.original.predicted_letter_grade || "—"}
@@ -534,7 +534,7 @@ export const LecturerClassesPage = () => {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 px-2 text-[11px] text-blue-700 border-blue-200 hover:bg-blue-50 cursor-pointer"
+                className="h-7 px-2 text-xs text-blue-700 border-blue-200 hover:bg-blue-50 cursor-pointer"
                 title="Xem giải thích nguyên nhân TreeSHAP"
                 onClick={() => {
                   if (student.rawPrediction) {
@@ -569,7 +569,7 @@ export const LecturerClassesPage = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-[11px] text-slate-700 hover:text-blue-700 hover:bg-slate-100 cursor-pointer"
+                className="h-7 px-2 text-xs text-slate-700 hover:text-blue-700 hover:bg-slate-100 cursor-pointer"
                 title="Mở phiên cố vấn & can thiệp cho sinh viên này"
                 onClick={() => {
                   if (!selectedClass) return;
@@ -736,7 +736,7 @@ export const LecturerClassesPage = () => {
                       </Badge>
                       <Badge
                         variant="outline"
-                        className="border-slate-200 bg-slate-50 text-slate-600 text-[11px]"
+                        className="border-slate-200 bg-slate-50 text-slate-600 text-xs"
                       >
                         {item.credits} Tín chỉ
                       </Badge>
@@ -826,7 +826,7 @@ export const LecturerClassesPage = () => {
                     {classPrediction?.inference_time_ms && (
                       <Badge
                         variant="outline"
-                        className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-mono gap-1"
+                        className="border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-mono gap-1"
                       >
                         <Sparkles className="h-2.5 w-2.5" />
                         Inference {classPrediction.inference_time_ms.toFixed(1)}
@@ -893,21 +893,21 @@ export const LecturerClassesPage = () => {
                   {/* AI Analytics Overview Cards */}
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                     <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200/70">
-                      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         Tổng sĩ số
                       </p>
                       <p className="mt-1 text-2xl font-black text-slate-900">
                         {classPrediction?.analytics?.total_students ??
                           roster.length}
                       </p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">
+                      <p className="text-xs text-slate-400 mt-0.5">
                         Sinh viên đăng ký
                       </p>
                     </div>
 
                     <div className="rounded-xl bg-rose-50/60 p-3.5 border border-rose-200/80">
                       <div className="flex items-center justify-between">
-                        <p className="text-[11px] font-semibold text-rose-700 uppercase tracking-wider">
+                        <p className="text-xs font-semibold text-rose-700 uppercase tracking-wider">
                           Nguy cơ cao
                         </p>
                         <ShieldAlert className="h-3.5 w-3.5 text-rose-600" />
@@ -916,7 +916,7 @@ export const LecturerClassesPage = () => {
                         {classPrediction?.analytics?.high_risk_count ??
                           riskCounts.high}
                       </p>
-                      <p className="text-[10px] text-rose-600 font-medium mt-0.5">
+                      <p className="text-xs text-rose-600 font-medium mt-0.5">
                         {classPrediction?.analytics?.high_risk_rate !==
                         undefined
                           ? `${(classPrediction.analytics.high_risk_rate * 100).toFixed(1)}% tỷ lệ lớp`
@@ -925,21 +925,21 @@ export const LecturerClassesPage = () => {
                     </div>
 
                     <div className="rounded-xl bg-amber-50/60 p-3.5 border border-amber-200/80">
-                      <p className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">
+                      <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">
                         Cần chú ý
                       </p>
                       <p className="mt-1 text-2xl font-black text-amber-600">
                         {classPrediction?.analytics?.medium_risk_count ??
                           riskCounts.medium}
                       </p>
-                      <p className="text-[10px] text-amber-600 font-medium mt-0.5">
+                      <p className="text-xs text-amber-600 font-medium mt-0.5">
                         Cần củng cố
                       </p>
                     </div>
 
                     <div className="rounded-xl bg-emerald-50/60 p-3.5 border border-emerald-200/80">
                       <div className="flex items-center justify-between">
-                        <p className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">
+                        <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">
                           An toàn
                         </p>
                         <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
@@ -948,14 +948,14 @@ export const LecturerClassesPage = () => {
                         {classPrediction?.analytics?.low_risk_count ??
                           riskCounts.low}
                       </p>
-                      <p className="text-[10px] text-emerald-600 font-medium mt-0.5">
+                      <p className="text-xs text-emerald-600 font-medium mt-0.5">
                         Phong độ tốt
                       </p>
                     </div>
 
                     <div className="rounded-xl bg-blue-50/60 p-3.5 border border-blue-200/80">
                       <div className="flex items-center justify-between">
-                        <p className="text-[11px] font-semibold text-blue-700 uppercase tracking-wider">
+                        <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
                           Dự báo TB
                         </p>
                         <TrendingUp className="h-3.5 w-3.5 text-blue-600" />
@@ -965,7 +965,7 @@ export const LecturerClassesPage = () => {
                           ? `${classPrediction.analytics.average_predicted_score10.toFixed(1)}/10`
                           : "—"}
                       </p>
-                      <p className="text-[10px] text-blue-600 font-medium mt-0.5">
+                      <p className="text-xs text-blue-600 font-medium mt-0.5">
                         {classPrediction?.analytics?.average_predicted_gpa4
                           ? `GPA ~${classPrediction.analytics.average_predicted_gpa4.toFixed(2)}/4.0`
                           : semesterDisplay}
@@ -1003,7 +1003,7 @@ export const LecturerClassesPage = () => {
                                       <Badge
                                         variant="outline"
                                         className={cn(
-                                          "text-[10px] px-1.5 py-0",
+                                          "text-xs px-1.5 py-0",
                                           isDecrease
                                             ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                                             : "border-rose-200 bg-rose-50 text-rose-700",
@@ -1014,7 +1014,7 @@ export const LecturerClassesPage = () => {
                                           : "Tăng rủi ro"}
                                       </Badge>
                                     </div>
-                                    <p className="mt-0.5 text-[11px] text-slate-600">
+                                    <p className="mt-0.5 text-xs text-slate-600">
                                       {factor.description}
                                     </p>
                                   </div>
@@ -1226,7 +1226,7 @@ export const LecturerClassesPage = () => {
                       {courseAssessment?.course_category && (
                         <Badge
                           variant="outline"
-                          className="text-[10px] bg-white text-slate-600"
+                          className="text-xs bg-white text-slate-600"
                         >
                           {courseAssessment.course_category}
                         </Badge>
@@ -1306,7 +1306,7 @@ export const LecturerClassesPage = () => {
                                 <div className="font-mono font-bold text-slate-900">
                                   {student.student_id}
                                 </div>
-                                <div className="text-[11px] text-slate-600">
+                                <div className="text-xs text-slate-600">
                                   {student.student_name}
                                 </div>
                               </td>
@@ -1398,7 +1398,7 @@ export const LecturerClassesPage = () => {
                   </span>
                   <Badge
                     variant="outline"
-                    className="border-slate-700 text-slate-300 text-[10px]"
+                    className="border-slate-700 text-slate-300 text-xs"
                   >
                     {selectedClass.course_code} • {selectedClass.course_name}
                   </Badge>
@@ -1425,7 +1425,7 @@ export const LecturerClassesPage = () => {
               {/* Prediction Summary KPI Banner */}
               <div className="grid grid-cols-3 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div>
-                  <p className="text-[11px] font-semibold text-slate-500 uppercase">
+                  <p className="text-xs font-semibold text-slate-500 uppercase">
                     Xác suất rớt môn
                   </p>
                   <p
@@ -1443,7 +1443,7 @@ export const LecturerClassesPage = () => {
                 </div>
 
                 <div>
-                  <p className="text-[11px] font-semibold text-slate-500 uppercase">
+                  <p className="text-xs font-semibold text-slate-500 uppercase">
                     Điểm TK Dự kiến
                   </p>
                   <p className="text-2xl font-black text-slate-900 mt-1">
@@ -1452,7 +1452,7 @@ export const LecturerClassesPage = () => {
                 </div>
 
                 <div>
-                  <p className="text-[11px] font-semibold text-slate-500 uppercase">
+                  <p className="text-xs font-semibold text-slate-500 uppercase">
                     Xếp loại / GPA
                   </p>
                   <p className="text-2xl font-black text-blue-700 mt-1">
@@ -1468,25 +1468,25 @@ export const LecturerClassesPage = () => {
                 </p>
                 <div className="grid grid-cols-4 gap-2 text-center text-xs">
                   <div className="rounded-lg bg-slate-100/70 p-2">
-                    <p className="text-[10px] text-slate-500">Quiz</p>
+                    <p className="text-xs text-slate-500">Quiz</p>
                     <p className="font-mono font-bold text-slate-800">
                       {selectedStudentForXai.current_marks?.quiz ?? "—"}
                     </p>
                   </div>
                   <div className="rounded-lg bg-slate-100/70 p-2">
-                    <p className="text-[10px] text-slate-500">Lab</p>
+                    <p className="text-xs text-slate-500">Lab</p>
                     <p className="font-mono font-bold text-slate-800">
                       {selectedStudentForXai.current_marks?.lab ?? "—"}
                     </p>
                   </div>
                   <div className="rounded-lg bg-slate-100/70 p-2">
-                    <p className="text-[10px] text-slate-500">BTL</p>
+                    <p className="text-xs text-slate-500">BTL</p>
                     <p className="font-mono font-bold text-slate-800">
                       {selectedStudentForXai.current_marks?.btl ?? "—"}
                     </p>
                   </div>
                   <div className="rounded-lg bg-slate-100/70 p-2">
-                    <p className="text-[10px] text-slate-500">Giữa kỳ</p>
+                    <p className="text-xs text-slate-500">Giữa kỳ</p>
                     <p className="font-mono font-bold text-slate-800">
                       {selectedStudentForXai.current_marks?.giua_ky ?? "—"}
                     </p>
@@ -1501,7 +1501,7 @@ export const LecturerClassesPage = () => {
                     <Layers className="h-4 w-4 text-blue-600" />
                     Đóng góp của các yếu tố học tập (TreeSHAP XAI)
                   </p>
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-xs text-slate-400">
                     Độ lệch biên so với điểm nền
                   </span>
                 </div>
@@ -1531,7 +1531,7 @@ export const LecturerClassesPage = () => {
                               <Badge
                                 variant="outline"
                                 className={cn(
-                                  "text-[10px] px-1.5 py-0 font-medium",
+                                  "text-xs px-1.5 py-0 font-medium",
                                   isPositive
                                     ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                                     : "border-rose-200 bg-rose-50 text-rose-700",
@@ -1543,7 +1543,7 @@ export const LecturerClassesPage = () => {
                               </Badge>
                             </div>
 
-                            <p className="text-[11px] text-slate-600 leading-snug">
+                            <p className="text-xs text-slate-600 leading-snug">
                               {factor.description}
                             </p>
 
@@ -1559,7 +1559,7 @@ export const LecturerClassesPage = () => {
                                   style={{ width: `${barPercent}%` }}
                                 />
                               </div>
-                              <span className="font-mono text-[10px] font-semibold text-slate-400">
+                              <span className="font-mono text-xs font-semibold text-slate-400">
                                 |SHAP|: {absValue.toFixed(3)}
                               </span>
                             </div>

@@ -128,6 +128,7 @@ export const LecturerInterventionsPage = () => {
   const {
     data: classes = [],
     isLoading: isLoadingClasses,
+    isError: isClassesError,
     refetch: refetchClasses,
   } = useLecturerCurrentClasses(lecturerId);
   const { data: activeSemester } = useActiveSemester();
@@ -929,7 +930,23 @@ export const LecturerInterventionsPage = () => {
             </CardHeader>
 
             <CardContent className="p-2 divide-y divide-slate-100 max-h-155 overflow-y-auto">
-              {isLoadingClasses || isLoadingEnrollments ? (
+              {isClassesError ? (
+                <div className="py-8 px-4 text-center text-xs text-rose-700 space-y-3">
+                  <AlertTriangle className="mx-auto h-7 w-7 text-rose-500" />
+                  <p className="font-semibold">
+                    Không thể tải danh sách lớp phụ trách.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void refetchClasses()}
+                    className="h-8 cursor-pointer gap-1.5 border-rose-200 bg-white text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    <span>Thử lại</span>
+                  </Button>
+                </div>
+              ) : isLoadingClasses || isLoadingEnrollments ? (
                 <div className="space-y-2 p-2">
                   {[1, 2, 3, 4].map((i) => (
                     <Skeleton key={i} className="h-16 w-full rounded-xl" />
@@ -986,7 +1003,7 @@ export const LecturerInterventionsPage = () => {
                             <p className="font-bold text-xs text-slate-900 truncate">
                               {student.studentName}
                             </p>
-                            <p className="font-mono text-[11px] text-slate-500">
+                            <p className="font-mono text-xs text-slate-500">
                               MSSV: {student.studentId}
                             </p>
                           </div>
@@ -994,19 +1011,19 @@ export const LecturerInterventionsPage = () => {
 
                         {studentSession && studentSession.unread_count > 0 && (
                           <div className="flex flex-col items-end shrink-0">
-                            <Badge className="bg-blue-600 text-[9px] text-white px-1.5 py-0">
+                            <Badge className="bg-blue-600 text-xs text-white px-1.5 py-0">
                               {studentSession.unread_count} tin mới
                             </Badge>
                           </div>
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-100/80 pt-1.5 mt-0.5">
+                      <div className="flex items-center justify-between text-xs text-slate-500 border-t border-slate-100/80 pt-1.5 mt-0.5">
                         <span className="font-medium text-slate-700">
                           {student.courseCode} ({student.classGroup})
                         </span>
                         {student.retaken && (
-                          <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                          <span className="text-xs font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
                             Học lại
                           </span>
                         )}
@@ -1053,7 +1070,7 @@ export const LecturerInterventionsPage = () => {
                         {selectedStudent.retaken && (
                           <Badge
                             variant="outline"
-                            className="border-amber-300 bg-amber-50 text-[10px] font-bold text-amber-700"
+                            className="border-amber-300 bg-amber-50 text-xs font-bold text-amber-700"
                           >
                             Học lại
                           </Badge>
@@ -1095,7 +1112,7 @@ export const LecturerInterventionsPage = () => {
                   <div className="flex flex-wrap items-center justify-between gap-2.5">
                     <div className="flex items-center gap-4 text-xs">
                       <div>
-                        <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                        <span className="text-xs text-slate-400 uppercase font-semibold">
                           Điểm Giữa kỳ
                         </span>
                         <p className="font-bold text-slate-900">
@@ -1106,7 +1123,7 @@ export const LecturerInterventionsPage = () => {
                       </div>
                       <div className="h-6 w-px bg-slate-200" />
                       <div>
-                        <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                        <span className="text-xs text-slate-400 uppercase font-semibold">
                           Thực hành Lab
                         </span>
                         <p className="font-bold text-slate-900">
@@ -1117,7 +1134,7 @@ export const LecturerInterventionsPage = () => {
                       </div>
                       <div className="h-6 w-px bg-slate-200" />
                       <div>
-                        <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                        <span className="text-xs text-slate-400 uppercase font-semibold">
                           Bài tập lớn
                         </span>
                         <p className="font-bold text-slate-900">
@@ -1130,7 +1147,7 @@ export const LecturerInterventionsPage = () => {
                         <>
                           <div className="h-6 w-px bg-slate-200" />
                           <div>
-                            <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                            <span className="text-xs text-slate-400 uppercase font-semibold">
                               Dự báo AI
                             </span>
                             <p className="font-bold text-blue-700">
@@ -1158,7 +1175,7 @@ export const LecturerInterventionsPage = () => {
                     </Badge>
                   </div>
 
-                  <p className="text-[11px] text-slate-600 border-t border-slate-200/70 pt-2">
+                  <p className="text-xs text-slate-600 border-t border-slate-200/70 pt-2">
                     <span className="font-semibold text-slate-800">
                       {selectedStudent.isAiPrediction
                         ? "Yếu tố SHAP nổi bật: "
@@ -1235,7 +1252,7 @@ export const LecturerInterventionsPage = () => {
                           onClick={() =>
                             markSessionReadMutation.mutate(activeSessionId)
                           }
-                          className="h-7 border-blue-300 bg-white text-[11px] font-semibold text-blue-700 hover:bg-blue-50 cursor-pointer gap-1"
+                          className="h-7 border-blue-300 bg-white text-xs font-semibold text-blue-700 hover:bg-blue-50 cursor-pointer gap-1"
                         >
                           <CheckCheck className="h-3.5 w-3.5" />
                           <span>Đánh dấu đã đọc</span>
@@ -1269,7 +1286,7 @@ export const LecturerInterventionsPage = () => {
                                   : "mr-auto items-start",
                               )}
                             >
-                              <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mb-1">
+                              <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
                                 <span className="font-semibold text-slate-600">
                                   {msg.senderName}
                                 </span>
@@ -1306,7 +1323,7 @@ export const LecturerInterventionsPage = () => {
 
                     {/* Quick Response Templates */}
                     <div className="space-y-1.5">
-                      <p className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
+                      <p className="text-xs font-bold text-slate-600 uppercase tracking-wide">
                         Mẫu Tin nhắn Hướng dẫn Nhanh (Click để gửi ngay):
                       </p>
                       <div className="flex flex-wrap gap-2">
@@ -1427,7 +1444,7 @@ export const LecturerInterventionsPage = () => {
                                     <Badge
                                       variant="outline"
                                       className={cn(
-                                        "text-[10px] font-bold px-1.5 py-0",
+                                        "text-xs font-bold px-1.5 py-0",
                                         book.status === "CONFIRMED" &&
                                           "border-emerald-300 bg-emerald-50 text-emerald-700",
                                         book.status === "PENDING" &&
@@ -1455,7 +1472,7 @@ export const LecturerInterventionsPage = () => {
                                     <span className="text-xs font-bold text-slate-900">
                                       {book.subject}
                                     </span>
-                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-500">
                                       {isCreatedByLecturer
                                         ? "Do Thầy/Cô đặt"
                                         : "Do Sinh viên đặt"}
@@ -1573,7 +1590,7 @@ export const LecturerInterventionsPage = () => {
                       >
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
-                            <label className="text-[11px] font-semibold text-slate-600">
+                            <label className="text-xs font-semibold text-slate-600">
                               Khung giờ hẹn
                             </label>
                             <Input
@@ -1586,7 +1603,7 @@ export const LecturerInterventionsPage = () => {
                           </div>
 
                           <div>
-                            <label className="text-[11px] font-semibold text-slate-600">
+                            <label className="text-xs font-semibold text-slate-600">
                               Hình thức gặp
                             </label>
                             <select
@@ -1609,7 +1626,7 @@ export const LecturerInterventionsPage = () => {
                         </div>
 
                         <div>
-                          <label className="text-[11px] font-semibold text-slate-600">
+                          <label className="text-xs font-semibold text-slate-600">
                             Lý do &amp; Ghi chú dặn dò
                           </label>
                           <Input
@@ -1657,7 +1674,7 @@ export const LecturerInterventionsPage = () => {
                         value={progressPercent}
                         className="h-2 bg-slate-200 **:data-[slot=progress-indicator]:bg-blue-600"
                       />
-                      <p className="text-[11px] text-slate-500">
+                      <p className="text-xs text-slate-500">
                         Khi sinh viên tích hoàn thành các đầu việc trên ứng dụng
                         của họ, tiến độ ở đây sẽ được cập nhật đồng bộ.
                       </p>
@@ -1718,7 +1735,7 @@ export const LecturerInterventionsPage = () => {
                                 <Badge
                                   variant="outline"
                                   className={cn(
-                                    "text-[9px] px-1.5 py-0 font-semibold",
+                                    "text-xs px-1.5 py-0 font-semibold",
                                     task.priority === "HIGH" &&
                                       "border-rose-300 bg-rose-50 text-rose-700",
                                     task.priority === "MEDIUM" &&
@@ -1760,7 +1777,7 @@ export const LecturerInterventionsPage = () => {
 
                       <form onSubmit={handleAddTask} className="space-y-3">
                         <div>
-                          <label className="text-[11px] font-semibold text-slate-600">
+                          <label className="text-xs font-semibold text-slate-600">
                             Tiêu đề nhiệm vụ cần làm
                           </label>
                           <Input
@@ -1774,7 +1791,7 @@ export const LecturerInterventionsPage = () => {
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
-                            <label className="text-[11px] font-semibold text-slate-600">
+                            <label className="text-xs font-semibold text-slate-600">
                               Hạn chót hoàn thành
                             </label>
                             <Input
@@ -1789,7 +1806,7 @@ export const LecturerInterventionsPage = () => {
                           </div>
 
                           <div>
-                            <label className="text-[11px] font-semibold text-slate-600">
+                            <label className="text-xs font-semibold text-slate-600">
                               Mức độ ưu tiên
                             </label>
                             <select

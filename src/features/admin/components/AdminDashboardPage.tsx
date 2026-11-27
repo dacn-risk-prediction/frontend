@@ -90,9 +90,9 @@ export const AdminDashboardPage = () => {
 
   const roleChartData = useMemo(
     () => [
-      { name: "Sinh viên", count: studentsCount, color: "#2563EB" },
-      { name: "Giảng viên", count: lecturersCount, color: "#0D9488" },
-      { name: "Quản trị viên", count: adminsCount, color: "#4F46E5" },
+      { name: "Sinh viên", count: studentsCount, color: "#1488db" },
+      { name: "Giảng viên", count: lecturersCount, color: "#10b981" },
+      { name: "Quản trị viên", count: adminsCount, color: "#030391" },
     ],
     [studentsCount, lecturersCount, adminsCount],
   );
@@ -411,7 +411,7 @@ export const AdminDashboardPage = () => {
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fontSize: 11, fill: "#64748b" }}
+                    tick={{ fontSize: 12, fill: "#64748b" }}
                     axisLine={false}
                     tickLine={false}
                     allowDecimals={false}
@@ -419,7 +419,7 @@ export const AdminDashboardPage = () => {
                   <Tooltip
                     cursor={{ fill: "rgba(148, 163, 184, 0.12)" }}
                     contentStyle={{
-                      borderRadius: "0.75rem",
+                      borderRadius: "8px",
                       border: "1px solid #e2e8f0",
                       fontSize: "12px",
                     }}

@@ -299,7 +299,7 @@ export const AdminUsersPage = () => {
               {row.original.name}
             </p>
             {row.original.title && (
-              <p className="text-[11px] text-slate-500">{row.original.title}</p>
+              <p className="text-xs text-slate-500">{row.original.title}</p>
             )}
           </div>
         ),
@@ -320,7 +320,7 @@ export const AdminUsersPage = () => {
             <Badge
               variant="outline"
               className={cn(
-                "text-[11px] font-semibold",
+                "text-xs font-semibold",
                 r === "admin" && "border-indigo-200 bg-indigo-50 text-indigo-700",
                 r === "lecturer" && "border-blue-200 bg-blue-50 text-blue-700",
                 r === "student" &&
@@ -654,7 +654,7 @@ export const AdminUsersPage = () => {
                     className="h-9 text-xs"
                   />
                   {createForm.formState.errors.user_code && (
-                    <p className="text-[11px] text-rose-600">
+                    <p className="text-xs text-rose-600">
                       {createForm.formState.errors.user_code.message}
                     </p>
                   )}
@@ -681,7 +681,7 @@ export const AdminUsersPage = () => {
                   className="h-9 text-xs"
                 />
                 {createForm.formState.errors.name && (
-                  <p className="text-[11px] text-rose-600">
+                  <p className="text-xs text-rose-600">
                     {createForm.formState.errors.name.message}
                   </p>
                 )}
@@ -697,7 +697,7 @@ export const AdminUsersPage = () => {
                     className="h-9 text-xs"
                   />
                   {createForm.formState.errors.email && (
-                    <p className="text-[11px] text-rose-600">
+                    <p className="text-xs text-rose-600">
                       {createForm.formState.errors.email.message}
                     </p>
                   )}
@@ -712,7 +712,7 @@ export const AdminUsersPage = () => {
                     className="h-9 text-xs"
                   />
                   {createForm.formState.errors.password && (
-                    <p className="text-[11px] text-rose-600">
+                    <p className="text-xs text-rose-600">
                       {createForm.formState.errors.password.message}
                     </p>
                   )}
@@ -825,7 +825,7 @@ export const AdminUsersPage = () => {
                 <Label className="text-xs font-semibold">Họ và tên *</Label>
                 <Input {...editForm.register("name")} className="h-9 text-xs" />
                 {editForm.formState.errors.name && (
-                  <p className="text-[11px] text-rose-600">
+                  <p className="text-xs text-rose-600">
                     {editForm.formState.errors.name.message}
                   </p>
                 )}
@@ -840,7 +840,7 @@ export const AdminUsersPage = () => {
                     className="h-9 text-xs"
                   />
                   {editForm.formState.errors.email && (
-                    <p className="text-[11px] text-rose-600">
+                    <p className="text-xs text-rose-600">
                       {editForm.formState.errors.email.message}
                     </p>
                   )}
@@ -876,7 +876,7 @@ export const AdminUsersPage = () => {
                     className="h-9 text-xs"
                   />
                   {editForm.formState.errors.password && (
-                    <p className="text-[11px] text-rose-600">
+                    <p className="text-xs text-rose-600">
                       {editForm.formState.errors.password.message}
                     </p>
                   )}

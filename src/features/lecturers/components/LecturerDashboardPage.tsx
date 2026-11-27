@@ -230,7 +230,7 @@ export const LecturerDashboardPage = () => {
     return orderedKeys.map((grade) => ({
       grade,
       count: totals[grade] ?? 0,
-      fill: GRADE_COLORS[grade] ?? "#2563eb",
+      fill: GRADE_COLORS[grade] ?? "#1488db",
     }));
   }, [classPredictions]);
 
@@ -509,7 +509,7 @@ export const LecturerDashboardPage = () => {
                         border: "1px solid #e2e8f0",
                       }}
                     />
-                    <Legend wrapperStyle={{ fontSize: "11px" }} />
+                    <Legend wrapperStyle={{ fontSize: "12px" }} />
                     <Bar
                       dataKey="HIGH"
                       name="Nguy cơ cao"
@@ -659,13 +659,13 @@ export const LecturerDashboardPage = () => {
                           </span>
                           <Badge
                             variant="outline"
-                            className="text-[10px] font-semibold text-slate-600 bg-white"
+                            className="text-xs font-semibold text-slate-600 bg-white"
                           >
                             {cls.total_students} SV
                           </Badge>
                           <Badge
                             variant="outline"
-                            className="text-[10px] text-blue-700 border-blue-200 bg-blue-50"
+                            className="text-xs text-blue-700 border-blue-200 bg-blue-50"
                           >
                             {cls.credits} TC
                           </Badge>
@@ -675,7 +675,7 @@ export const LecturerDashboardPage = () => {
                                 highCount > 0 ? "destructive" : "outline"
                               }
                               className={cn(
-                                "text-[10px]",
+                                "text-xs",
                                 highCount === 0 &&
                                   "border-emerald-200 bg-emerald-50 text-emerald-700",
                               )}
@@ -692,7 +692,7 @@ export const LecturerDashboardPage = () => {
 
                     <div className="flex items-center gap-3 text-xs">
                       {avgScore !== undefined && (
-                        <span className="text-[11px] font-semibold text-blue-700">
+                        <span className="text-xs font-semibold text-blue-700">
                           TB dự báo: {avgScore.toFixed(1)}
                         </span>
                       )}

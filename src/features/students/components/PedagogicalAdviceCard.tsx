@@ -373,9 +373,13 @@ export const PedagogicalAdviceCard = ({
                       <span className="font-semibold text-slate-700">
                         Yếu tố liên quan:{" "}
                       </span>
-                      {rec.linked_shap_features
-                        .map((feat) => formatFeatureName(feat).label)
-                        .join(" · ")}
+                      {Array.from(
+                        new Set(
+                          rec.linked_shap_features.map(
+                            (feat) => formatFeatureName(feat).label,
+                          ),
+                        ),
+                      ).join(" · ")}
                     </p>
                   )}
 

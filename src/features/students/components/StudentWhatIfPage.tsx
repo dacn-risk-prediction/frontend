@@ -918,7 +918,7 @@ export const StudentWhatIfPage = () => {
                     <Badge
                       variant="outline"
                       className={cn(
-                        "text-[10px] font-bold px-1.5 py-0",
+                        "text-xs font-bold px-1.5 py-0",
                         aiVerifiedResult.baseline.risk_level === "HIGH"
                           ? "border-rose-300 bg-rose-50 text-rose-700"
                           : aiVerifiedResult.baseline.risk_level === "MEDIUM"
@@ -1163,14 +1163,14 @@ export const StudentWhatIfPage = () => {
                           </span>
                           <Badge
                             variant="secondary"
-                            className="h-5 border border-slate-200 bg-slate-100 text-[10px] font-medium text-slate-700"
+                            className="h-5 border border-slate-200 bg-slate-100 text-xs font-medium text-slate-700"
                           >
                             {course.credits} tín chỉ
                           </Badge>
                           {course.class_group && (
                             <Badge
                               variant="outline"
-                              className="h-5 border-slate-200 bg-white text-[10px] font-medium text-slate-600"
+                              className="h-5 border-slate-200 bg-white text-xs font-medium text-slate-600"
                             >
                               Nhóm {course.class_group}
                             </Badge>
@@ -1183,7 +1183,7 @@ export const StudentWhatIfPage = () => {
                             <Badge
                               variant="outline"
                               className={cn(
-                                "text-[10px] font-semibold",
+                                "text-xs font-semibold",
                                 pred.risk_level === "HIGH" &&
                                   "border-rose-200 bg-rose-50 text-rose-700",
                                 pred.risk_level === "MEDIUM" &&
@@ -1198,7 +1198,7 @@ export const StudentWhatIfPage = () => {
                               variant="ghost"
                               size="sm"
                               className={cn(
-                                "h-6 px-2 text-[10px] font-semibold cursor-pointer",
+                                "h-6 px-2 text-xs font-semibold cursor-pointer",
                                 isTarget
                                   ? "bg-blue-100 text-blue-800"
                                   : "text-blue-600 hover:bg-blue-50",
@@ -1223,7 +1223,7 @@ export const StudentWhatIfPage = () => {
                             <span className="font-mono font-bold text-slate-900">
                               {processScore.toFixed(1)}/10
                             </span>
-                            <span className="text-[11px] text-slate-400">
+                            <span className="text-xs text-slate-400">
                               (Tỷ trọng {processWeightPct}%{sim?.hasRealWeights ? " thật" : ""} • {procInfo.marksSummary})
                             </span>
                           </div>
@@ -1257,7 +1257,7 @@ export const StudentWhatIfPage = () => {
                         {/* Thanh trượt Điểm thi Cuối kỳ */}
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
                           <div className="flex-1">
-                            <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
+                            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
                               <span>Điểm thi Cuối kỳ (Tỷ trọng {finalWeightPct}%)</span>
                               <span className="font-mono font-bold text-blue-700">
                                 {finalExamScore.toFixed(1)} / 10
@@ -1295,7 +1295,7 @@ export const StudentWhatIfPage = () => {
                         {/* Optional Component Sliders for Focused Course (Quiz / Lab / BTL / Giữa kỳ) */}
                         {isTarget && editableProcessKeys.length > 0 && (
                           <div className="mt-3 border-t border-slate-200/70 pt-3">
-                            <p className="mb-2 text-[11px] font-semibold text-slate-600">
+                            <p className="mb-2 text-xs font-semibold text-slate-600">
                               Điều chỉnh thêm cột điểm quá trình (theo Counterfactual):
                             </p>
                             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -1311,7 +1311,7 @@ export const StudentWhatIfPage = () => {
                                     key={item.key}
                                     className="rounded-md border border-slate-200/70 bg-white px-2.5 py-2"
                                   >
-                                    <div className="mb-1 flex items-center justify-between text-[11px]">
+                                    <div className="mb-1 flex items-center justify-between text-xs">
                                       <span className="font-medium text-slate-600">
                                         {item.label}
                                       </span>
@@ -1365,7 +1365,7 @@ export const StudentWhatIfPage = () => {
                         </div>
 
                         {pred?.predicted_score10 !== undefined && (
-                          <span className="text-[11px] text-slate-400 shrink-0">
+                          <span className="text-xs text-slate-400 shrink-0">
                             AI ước tính: <span className="font-semibold text-slate-600">{pred.predicted_score10.toFixed(1)}/10</span>
                           </span>
                         )}
@@ -1466,7 +1466,7 @@ export const StudentWhatIfPage = () => {
                                   <Badge
                                     variant="outline"
                                     className={cn(
-                                      "text-[10px] font-semibold h-4.5 px-1.5",
+                                      "text-xs font-semibold h-4.5 px-1.5",
                                       isRiskIncrease &&
                                         "border-rose-300 bg-white text-rose-700",
                                       isRiskDecrease &&
@@ -1521,17 +1521,17 @@ export const StudentWhatIfPage = () => {
                 {/* Projected Term GPA */}
                 <div className="rounded-xl bg-slate-900 p-5 text-white shadow-xs">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                    <p className="text-xs font-medium uppercase tracking-wider text-slate-300">
                       GPA Dự phóng Học kỳ
                     </p>
                     <Badge
                       variant="outline"
-                      className="border-slate-700 bg-slate-800 text-[10px] text-slate-300"
+                      className="border-slate-700 bg-slate-800 text-xs text-slate-300"
                     >
                       {activeSemesterLabel}
                     </Badge>
                   </div>
-                  <div className="mt-2 flex items-baseline gap-2">
+                  <div className="mt-2 flex items-baseline gap-2 tabular-nums">
                     <span className="text-3xl font-extrabold tracking-tight text-white">
                       {simulatedTermGpa.toFixed(2)}
                     </span>
@@ -1540,7 +1540,7 @@ export const StudentWhatIfPage = () => {
                         "text-xs font-semibold",
                         termGpaDelta > 0 && "text-emerald-400",
                         termGpaDelta < 0 && "text-rose-400",
-                        termGpaDelta === 0 && "text-slate-400",
+                        termGpaDelta === 0 && "text-slate-300",
                       )}
                     >
                       {termGpaDelta > 0 && `+${termGpaDelta.toFixed(2)} tăng so với AI`}
@@ -1548,11 +1548,11 @@ export const StudentWhatIfPage = () => {
                       {termGpaDelta === 0 && "Trùng khớp AI"}
                     </span>
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+                  <div className="mt-2 flex items-center justify-between text-xs text-slate-300 tabular-nums">
                     <span>{totalTermCredits} tín chỉ đăng ký</span>
                     <span>
-                      AI Baseline:{" "}
-                      <span className="font-semibold text-slate-300">
+                      Mức AI gốc:{" "}
+                      <span className="font-semibold text-white">
                         {baselineTermGpa.toFixed(2)}
                       </span>
                     </span>
@@ -1577,7 +1577,7 @@ export const StudentWhatIfPage = () => {
                       <Badge
                         variant="outline"
                         className={cn(
-                          "text-[10px] font-semibold",
+                          "text-xs font-semibold",
                           cumulativeGpaDelta > 0 &&
                             "border-emerald-200 bg-emerald-50 text-emerald-700",
                           cumulativeGpaDelta < 0 &&
@@ -1651,7 +1651,7 @@ export const StudentWhatIfPage = () => {
                     </span>
                   </div>
 
-                  <p className="mt-2 text-[11px] leading-relaxed text-slate-600">
+                  <p className="mt-2 text-xs leading-relaxed text-slate-600">
                     {disqualifiedCount > 0 ? (
                       <span className="text-rose-700 font-semibold">
                         Cảnh báo: Có {disqualifiedCount} môn đang bị điểm liệt cuối kỳ (&lt; 3.0). Cần điều chỉnh điểm thi cuối kỳ ngay!

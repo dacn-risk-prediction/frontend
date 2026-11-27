@@ -127,12 +127,76 @@ export function formatFeatureName(rawFeature: string): {
       tip: "Điểm trung bình các môn cốt lõi ngành học",
     };
   }
+  if (f.includes("recommended_semester") || f.includes("ky_khuyen_nghi")) {
+    return {
+      label: "Học kỳ khuyến nghị theo CTĐT",
+      tip: "Thời điểm bố trí môn học trong khung chương trình chuẩn",
+    };
+  }
+  if (f.startsWith("course_code_") || f === "course_code") {
+    return {
+      label: "Đặc thù môn học",
+      tip: "Tính chất và độ phân hóa điểm lịch sử của học phần này",
+    };
+  }
+  if (f.startsWith("semester_code") || f === "semester") {
+    return {
+      label: "Bối cảnh học kỳ hiện tại",
+      tip: "Ảnh hưởng chung của học kỳ đang theo học",
+    };
+  }
+  if (f.startsWith("major_") || f === "major") {
+    return {
+      label: "Ngành đào tạo",
+      tip: "Nhóm ngành học thuật của sinh viên",
+    };
+  }
+  if (f.startsWith("cohort_") || f === "cohort") {
+    return {
+      label: "Khóa đào tạo",
+      tip: "Chuẩn chương trình áp dụng theo khóa tuyển sinh",
+    };
+  }
+  if (f.includes("cuoi_ky") || f.includes("final_exam")) {
+    return {
+      label: "Điểm thi cuối kỳ",
+      tip: "Kết quả bài thi kết thúc học phần",
+    };
+  }
+  if (f.includes("semester_gpa") || f.includes("recent_gpa")) {
+    return {
+      label: "GPA học kỳ gần nhất",
+      tip: "Phong độ học tập ở các học kỳ liền kề",
+    };
+  }
 
-  const readable = rawFeature
-    .replace(/_/g, " ")
-    .replace(/([A-Z])/g, " $1")
-    .replace(/^./, (str) => str.toUpperCase())
+  return { label: "Yếu tố học vụ bổ sung" };
+}
+
+/**
+ * Sanitize backend SHAP descriptions so raw feature identifiers
+ * (e.g., course_code_*, recommended_semester, "Đặc trưng ...") never leak to UI.
+ */
+export function sanitizeShapDescription(
+  description: string | undefined,
+  rawFeature: string,
+): string {
+  const featureInfo = formatFeatureName(rawFeature);
+  if (!description || !description.trim()) {
+    return featureInfo.tip ?? `${featureInfo.label} tác động đến dự báo.`;
+  }
+
+  const cleaned = description
+    .replace(/course_code_[A-Za-z0-9_-]+/gi, "đặc thù môn học")
+    .replace(/recommended_semester/gi, "học kỳ khuyến nghị theo CTĐT")
+    .replace(/Đặc trưng\s+[a-zA-Z0-9_.-]+/g, featureInfo.label)
+    .replace(/Đặc trưng\s*:?\s*/gi, "")
+    .replace(/\s{2,}/g, " ")
     .trim();
 
-  return { label: readable };
+  if (!cleaned) {
+    return featureInfo.tip ?? `${featureInfo.label} tác động đến dự báo.`;
+  }
+
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
