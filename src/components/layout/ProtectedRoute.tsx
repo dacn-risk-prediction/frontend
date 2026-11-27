@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import { Navigate, Outlet, useLocation } from "react-router-dom"
 import { useAuthUser, ROLE_DEFAULT_REDIRECT } from "@/features/auth"
 import type { UserRole } from "@/types"
@@ -19,6 +20,14 @@ export const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
   const location = useLocation()
   const hasToken = Boolean(localStorage.getItem("access_token"))
   const { data: user, isLoading, isError, error, refetch } = useAuthUser()
+  const isInactive = Boolean(user && user.is_active === false)
+
+  useEffect(() => {
+    if (isInactive) {
+      localStorage.removeItem("access_token")
+      localStorage.removeItem("refresh_token")
+    }
+  }, [isInactive])
 
   if (!hasToken) {
     return <Navigate to="/login" state={{ from: location }} replace />
@@ -51,7 +60,7 @@ export const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
         <Button
           size="sm"
           onClick={() => void refetch()}
-          className="cursor-pointer bg-blue-600 text-xs text-white hover:bg-blue-700"
+          className="cursor-pointer bg-primary text-xs font-semibold text-primary-foreground hover:bg-brand-blue-hover"
         >
           Thử lại
         </Button>
@@ -59,7 +68,7 @@ export const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
     )
   }
 
-  if (!user || user.is_active === false) {
+  if (!user || isInactive) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 

@@ -60,9 +60,25 @@ export const AdminAcademicsPage = () => {
     tabParam === "classes" || tabParam === "curriculums" ? tabParam : "courses";
 
   const [courseSearch, setCourseSearch] = useState("");
+  const [debouncedCourseSearch, setDebouncedCourseSearch] = useState("");
   const [classSemester, setClassSemester] = useState("");
   const [classSearch, setClassSearch] = useState("");
+  const [debouncedClassSearch, setDebouncedClassSearch] = useState("");
   const [selectedCurriculumId, setSelectedCurriculumId] = useState<string>("");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedCourseSearch(courseSearch);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [courseSearch]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedClassSearch(classSearch);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [classSearch]);
 
   // Full catalog query kept independent from Tab 1's courseSearch so Tabs 2 & 3 never lose names/options
   const { data: allCourses = [] } = useAdminCourses();
@@ -71,27 +87,38 @@ export const AdminAcademicsPage = () => {
     isLoading: isLoadingCourses,
     isError: isCoursesError,
     refetch: refetchCourses,
-  } = useAdminCourses(courseSearch);
-  const { data: semesters = [] } = useAdminSemesters();
-  const { data: lecturers = [] } = useAdminLecturers();
+  } = useAdminCourses(debouncedCourseSearch, { enabled: activeTab === "courses" });
+  const { data: semesters = [] } = useAdminSemesters({
+    enabled: activeTab === "classes",
+  });
+  const { data: lecturers = [] } = useAdminLecturers({
+    enabled: activeTab === "classes",
+  });
   const {
-    data: classes = [],
+    data: classesData,
     isLoading: isLoadingClasses,
     isError: isClassesError,
     refetch: refetchClasses,
-  } = useAdminClasses({
-    semester_code: classSemester || undefined,
-    search: classSearch || undefined,
-  });
+  } = useAdminClasses(
+    {
+      semester_code: classSemester || undefined,
+      search: debouncedClassSearch || undefined,
+    },
+    { enabled: activeTab === "classes" },
+  );
+  const classes = classesData ?? [];
   const {
-    data: curriculums = [],
+    data: curriculumsData,
     isLoading: isLoadingCurriculums,
     isError: isCurriculumsError,
     refetch: refetchCurriculums,
-  } = useAdminCurriculums();
+  } = useAdminCurriculums({ enabled: activeTab === "curriculums" });
+  const curriculums = curriculumsData ?? [];
 
   const effectiveCurriculumId =
-    selectedCurriculumId || curriculums[0]?.curriculum_id || "";
+    activeTab === "curriculums"
+      ? selectedCurriculumId || curriculums[0]?.curriculum_id || ""
+      : "";
   const { data: curriculumDetail, isLoading: isLoadingCurriculumDetail } =
     useAdminCurriculumDetail(effectiveCurriculumId);
 
@@ -323,10 +350,14 @@ export const AdminAcademicsPage = () => {
         {(
           [
             { id: "courses", label: `Môn học (${courses.length})`, icon: BookOpen },
-            { id: "classes", label: `Lớp học phần (${classes.length})`, icon: Layers },
+            {
+              id: "classes",
+              label: classesData ? `Lớp học phần (${classesData.length})` : "Lớp học phần",
+              icon: Layers,
+            },
             {
               id: "curriculums",
-              label: `Khung CTĐT (${curriculums.length})`,
+              label: curriculumsData ? `Khung CTĐT (${curriculumsData.length})` : "Khung CTĐT",
               icon: GraduationCap,
             },
           ] as const

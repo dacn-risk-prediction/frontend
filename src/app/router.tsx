@@ -161,21 +161,27 @@ const appRouter = createBrowserRouter([
   {
     path: "/403",
     element: (
-      <div className="flex h-screen flex-col items-center justify-center space-y-4 bg-background p-4 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10 text-destructive shadow-sm">
-          <span className="text-2xl font-black">403</span>
+      <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-6 text-center">
+        <div className="w-full max-w-md space-y-4 rounded-xl border border-slate-200 bg-white p-8 shadow-xs">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-rose-50 text-rose-600 ring-1 ring-rose-200">
+            <span className="font-heading text-xl font-extrabold tabular-nums">403</span>
+          </div>
+          <h1 className="font-heading text-xl font-bold tracking-tight text-slate-900">
+            Không có quyền truy cập
+          </h1>
+          <p className="text-sm leading-relaxed text-slate-600">
+            Tài khoản của bạn không có quyền truy cập vào khu vực hoặc tài nguyên học vụ này.
+          </p>
+          <div className="pt-2">
+            <Link
+              to="/"
+              className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground shadow-2xs transition-colors hover:bg-brand-blue-hover"
+            >
+              Quay về Cổng chính
+            </Link>
+          </div>
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Access Denied</h1>
-        <p className="max-w-md text-sm text-muted-foreground">
-          You do not have the required permissions to access this institutional resource.
-        </p>
-        <Link
-          to="/"
-          className="inline-flex items-center justify-center rounded-lg bg-brand-blue px-4 py-2 text-sm font-medium text-white shadow hover:bg-brand-blue-hover transition-colors"
-        >
-          Return to Portal
-        </Link>
-      </div>
+      </main>
     ),
   },
   {

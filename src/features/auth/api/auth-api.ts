@@ -33,13 +33,11 @@ export const useAuthUser = () => {
 }
 
 export const useLogin = () => {
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: loginWithPassword,
-    onSuccess: async (tokens) => {
+    onSuccess: (tokens) => {
       localStorage.setItem("access_token", tokens.access_token)
       localStorage.setItem("refresh_token", tokens.refresh_token)
-      await queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEY })
     },
   })
 }

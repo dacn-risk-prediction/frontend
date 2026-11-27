@@ -812,7 +812,9 @@ export const LecturerInterventionsPage = () => {
               {serverSessions?.length ?? 0}
             </span>
             <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs font-semibold text-emerald-200">
-              {appointments.filter((a) => a.status === "PENDING").length} hẹn chờ duyệt
+              {selectedStudent
+                ? `${appointments.filter((a) => a.status === "PENDING").length} hẹn chờ · phiên đang chọn`
+                : "Chưa chọn phiên"}
             </span>
           </div>
           <p className="mt-3 text-xs text-slate-300">
