@@ -27,9 +27,11 @@ export const getActiveSemester = async (): Promise<Semester | null> => {
 };
 
 export const useActiveSemester = () => {
+  const hasToken = Boolean(localStorage.getItem("access_token"));
   return useQuery({
     queryKey: ACTIVE_SEMESTER_QUERY_KEY(),
     queryFn: getActiveSemester,
+    enabled: hasToken,
     staleTime: 30 * 60 * 1000,
   });
 };

@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { extractApiError } from "@/lib/format";
 import { formatFeatureName } from "@/lib/shap-features";
 import { cn } from "@/lib/utils";
 import type {
@@ -297,10 +298,23 @@ export const PedagogicalAdviceCard = ({
         ...prev,
         [adviceKey]: result,
       }));
-    } catch {
-      setErrorMessage(
-        "Trợ lý AI hiện đang bận hoặc tạm thời không khả dụng. Bạn vẫn có thể theo dõi các khuyến nghị chuẩn bên trên.",
-      );
+    } catch (err: unknown) {
+      const status =
+        typeof err === "object" && err !== null && "response" in err
+          ? (err as { response?: { status?: number } }).response?.status
+          : undefined;
+      if (status === 429) {
+        setErrorMessage(
+          "Bạn đang yêu cầu tạo lại gợi ý AI quá nhanh. Vui lòng thử lại sau ít phút hoặc tham khảo các khuyến nghị chuẩn bên trên.",
+        );
+      } else {
+        setErrorMessage(
+          extractApiError(
+            err,
+            "Trợ lý AI hiện đang bận hoặc tạm thời không khả dụng. Bạn vẫn có thể theo dõi các khuyến nghị chuẩn bên trên.",
+          ),
+        );
+      }
     }
   };
 

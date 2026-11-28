@@ -10,10 +10,11 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { getCurrentUser, useLogin } from "../api/auth-api";
+import { AUTH_QUERY_KEY, getCurrentUser, useLogin } from "../api/auth-api";
 import { loginSchema, type LoginFormValues } from "../schemas/login-schema";
 import { ROLE_DEFAULT_REDIRECT } from "../types";
 
@@ -25,6 +26,7 @@ const PLATFORM_HIGHLIGHTS = [
 
 export const LoginForm = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const loginMutation = useLogin();
 
   const {
@@ -40,6 +42,7 @@ export const LoginForm = () => {
     try {
       await loginMutation.mutateAsync(values);
       const user = await getCurrentUser();
+      queryClient.setQueryData(AUTH_QUERY_KEY, user);
       toast.success(`Chào mừng trở lại, ${user.full_name}!`);
       navigate(ROLE_DEFAULT_REDIRECT[user.role], { replace: true });
     } catch (err: unknown) {

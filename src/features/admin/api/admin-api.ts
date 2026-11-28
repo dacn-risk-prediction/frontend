@@ -183,7 +183,7 @@ export const useCreateLecturerProfile = () => {
   });
 };
 
-export const useAdminLecturers = () => {
+export const useAdminLecturers = (options?: { enabled?: boolean }) => {
   return useQuery({
     queryKey: adminKeys.lecturers(),
     queryFn: async () => {
@@ -192,6 +192,7 @@ export const useAdminLecturers = () => {
       });
       return res.data;
     },
+    enabled: options?.enabled ?? true,
     staleTime: 60 * 1000,
   });
 };
@@ -200,7 +201,7 @@ export const useAdminLecturers = () => {
 // Semesters API
 // ==========================================
 
-export const useAdminSemesters = () => {
+export const useAdminSemesters = (options?: { enabled?: boolean }) => {
   return useQuery({
     queryKey: adminKeys.semesters(),
     queryFn: async () => {
@@ -209,6 +210,7 @@ export const useAdminSemesters = () => {
       });
       return res.data;
     },
+    enabled: options?.enabled ?? true,
     staleTime: 30 * 1000,
   });
 };
@@ -289,7 +291,10 @@ export const useSwitchActiveSemester = () => {
 // Courses, Classes & Curriculums API
 // ==========================================
 
-export const useAdminCourses = (search?: string) => {
+export const useAdminCourses = (
+  search?: string,
+  options?: { enabled?: boolean },
+) => {
   return useQuery({
     queryKey: adminKeys.courses(search),
     queryFn: async () => {
@@ -301,6 +306,7 @@ export const useAdminCourses = (search?: string) => {
       });
       return res.data;
     },
+    enabled: options?.enabled ?? true,
     staleTime: 60 * 1000,
   });
 };
@@ -354,10 +360,13 @@ export const useDeleteCourse = () => {
   });
 };
 
-export const useAdminClasses = (params?: {
-  semester_code?: string;
-  search?: string;
-}) => {
+export const useAdminClasses = (
+  params?: {
+    semester_code?: string;
+    search?: string;
+  },
+  options?: { enabled?: boolean },
+) => {
   return useQuery({
     queryKey: adminKeys.classes(params),
     queryFn: async () => {
@@ -370,6 +379,7 @@ export const useAdminClasses = (params?: {
       });
       return res.data;
     },
+    enabled: options?.enabled ?? true,
     staleTime: 60 * 1000,
   });
 };
@@ -423,7 +433,7 @@ export const useDeleteClass = () => {
   });
 };
 
-export const useAdminCurriculums = () => {
+export const useAdminCurriculums = (options?: { enabled?: boolean }) => {
   return useQuery({
     queryKey: adminKeys.curriculums(),
     queryFn: async () => {
@@ -432,6 +442,7 @@ export const useAdminCurriculums = () => {
       });
       return res.data;
     },
+    enabled: options?.enabled ?? true,
     staleTime: 5 * 60 * 1000,
   });
 };
